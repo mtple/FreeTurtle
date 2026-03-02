@@ -12,6 +12,6 @@
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["bin/**/*", "src/**/*"],
+  "include": ["bin/**/*", "src/**/*", "test-loaders.ts"],
   "exclude": ["node_modules", "dist"]
 }
