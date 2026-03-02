@@ -27,14 +27,19 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.3.3",
+    "@types/pg": "^8.18.0",
     "eslint": "^10.0.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@octokit/rest": "^22.0.1",
     "commander": "^14.0.3",
+    "croner": "^10.0.1",
     "dotenv": "^17.3.1",
-    "openai": "^6.25.0"
+    "openai": "^6.25.0",
+    "pg": "^8.19.0",
+    "viem": "^2.46.3"
   }
 }
