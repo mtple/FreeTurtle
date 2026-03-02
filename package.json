@@ -1,0 +1,32 @@
+{
+  "name": "freeturtle",
+  "version": "0.1.0",
+  "description": "An open-source framework for deploying autonomous AI operators that run onchain businesses.",
+  "type": "module",
+  "main": "dist/bin/freeturtle.js",
+  "bin": {
+    "freeturtle": "dist/bin/freeturtle.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "operator",
+    "onchain",
+    "farcaster",
+    "autonomous"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3",
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "commander": "^14.0.3"
+  }
+}
