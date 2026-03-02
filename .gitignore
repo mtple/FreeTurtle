@@ -25,3 +25,6 @@ Thumbs.db
 # Runtime
 *.pid
 *.sock
+
+# Build plan
+FREETURTLE-BUILD-PLAN.md
