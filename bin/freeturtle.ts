@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { runSetup } from "../src/setup.js";
 
 const program = new Command();
 
@@ -16,6 +17,13 @@ program
   .description("Verify the CLI is working")
   .action(() => {
     console.log("FreeTurtle v0.1");
+  });
+
+program
+  .command("setup")
+  .description("Configure your LLM provider and API key")
+  .action(async () => {
+    await runSetup(process.cwd());
   });
 
 program.parse();

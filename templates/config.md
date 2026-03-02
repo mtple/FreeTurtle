@@ -1,9 +1,11 @@
 # FreeTurtle Config
 
 ## LLM
-- provider: anthropic
+- provider: claude_api
 - model: claude-sonnet-4-5-20250929
 - max_tokens: 4096
+- api_key_env: ANTHROPIC_API_KEY
+- oauth_token_env: ANTHROPIC_AUTH_TOKEN
 
 ## Cron
 ### post

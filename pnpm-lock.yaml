@@ -8,9 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.78.0
+        version: 0.78.0
       commander:
         specifier: ^14.0.3
         version: 14.0.3
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
+      openai:
+        specifier: ^6.25.0
+        version: 6.25.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -29,6 +38,19 @@ importers:
         version: 8.56.1(eslint@10.0.2)(typescript@5.9.3)
 
 packages:
+
+  '@anthropic-ai/sdk@0.78.0':
+    resolution: {integrity: sha512-PzQhR715td/m1UaaN5hHXjYB8Gl2lF9UVhrrGrZeysiF6Rb74Wc9GCB8hzLdzmQtBd1qe89F9OptgB9Za1Ib5w==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@babel/runtime@7.28.6':
+    resolution: {integrity: sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA==}
+    engines: {node: '>=6.9.0'}
 
   '@eslint-community/eslint-utils@4.9.1':
     resolution: {integrity: sha512-phrYmNiYppR7znFEdqgfWHXR6NCkZEK7hwWDHZUjit/2/U0r6XvkDl0SYnoM51Hq7FhCGdLDT6zxCCOY1hexsQ==}
@@ -197,6 +219,10 @@ packages:
   deep-is@0.1.4:
     resolution: {integrity: sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==}
 
+  dotenv@17.3.1:
+    resolution: {integrity: sha512-IO8C/dzEb6O3F9/twg6ZLXz164a2fhTnEWb95H23Dm4OuN+92NmEAlTrupP9VW6Jm3sO26tQlqyvyi4CsnY9GA==}
+    engines: {node: '>=12'}
+
   escape-string-regexp@4.0.0:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
@@ -306,6 +332,10 @@ packages:
   json-buffer@3.0.1:
     resolution: {integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==}
 
+  json-schema-to-ts@3.1.1:
+    resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
+    engines: {node: '>=16'}
+
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
 
@@ -332,6 +362,18 @@ packages:
 
   natural-compare@1.4.0:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
+
+  openai@6.25.0:
+    resolution: {integrity: sha512-mEh6VZ2ds2AGGokWARo18aPISI1OhlgdEIC1ewhkZr8pSIT31dec0ecr9Nhxx0JlybyOgoAT1sWeKtwPZzJyww==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -382,6 +424,9 @@ packages:
     resolution: {integrity: sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==}
     engines: {node: '>=12.0.0'}
 
+  ts-algebra@2.0.0:
+    resolution: {integrity: sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw==}
+
   ts-api-utils@2.4.0:
     resolution: {integrity: sha512-3TaVTaAv2gTiMB35i3FiGJaRfwb3Pyn/j3m/bfAvGe8FB7CF6u+LMYqYlDh7reQf7UNvoTvdfAqHGmPGOSsPmA==}
     engines: {node: '>=18.12'}
@@ -424,6 +469,12 @@ packages:
     engines: {node: '>=10'}
 
 snapshots:
+
+  '@anthropic-ai/sdk@0.78.0':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+
+  '@babel/runtime@7.28.6': {}
 
   '@eslint-community/eslint-utils@4.9.1(eslint@10.0.2)':
     dependencies:
@@ -604,6 +655,8 @@ snapshots:
 
   deep-is@0.1.4: {}
 
+  dotenv@17.3.1: {}
+
   escape-string-regexp@4.0.0: {}
 
   eslint-scope@9.1.1:
@@ -716,6 +769,11 @@ snapshots:
 
   json-buffer@3.0.1: {}
 
+  json-schema-to-ts@3.1.1:
+    dependencies:
+      '@babel/runtime': 7.28.6
+      ts-algebra: 2.0.0
+
   json-schema-traverse@0.4.1: {}
 
   json-stable-stringify-without-jsonify@1.0.1: {}
@@ -740,6 +798,8 @@ snapshots:
   ms@2.1.3: {}
 
   natural-compare@1.4.0: {}
+
+  openai@6.25.0: {}
 
   optionator@0.9.4:
     dependencies:
@@ -780,6 +840,8 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
+
+  ts-algebra@2.0.0: {}
 
   ts-api-utils@2.4.0(typescript@5.9.3):
     dependencies:

@@ -23,6 +23,10 @@ export interface FreeTurtleConfig {
     provider: string;
     model: string;
     max_tokens: number;
+    base_url?: string;
+    api_key_env?: string;
+    oauth_token_env?: string;
+    [key: string]: string | number | undefined;
   };
   cron: Record<string, CronTask>;
   channels: Record<string, ChannelConfig>;
