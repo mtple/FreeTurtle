@@ -16,3 +16,17 @@ export interface ToolResult {
 }
 
 export type ToolExecutor = (call: ToolCall) => Promise<string>;
+
+export interface FreeTurtleModule {
+  name: string;
+  description: string;
+
+  initialize(
+    config: Record<string, unknown>,
+    env: Record<string, string>
+  ): Promise<void>;
+
+  getTools(): ToolDefinition[];
+
+  executeTool(name: string, input: Record<string, unknown>): Promise<string>;
+}
