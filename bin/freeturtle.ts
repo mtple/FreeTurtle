@@ -10,6 +10,7 @@ import { runSend } from "../src/cli/send.js";
 import { runSetup } from "../src/setup.js";
 import { connectFarcaster } from "../src/cli/connect-farcaster.js";
 import { runInstallService } from "../src/cli/install-service.js";
+import { runUpdate } from "../src/cli/update.js";
 
 const DEFAULT_DIR = join(homedir(), ".freeturtle");
 
@@ -73,6 +74,13 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (message, opts) => {
     await runSend(opts.dir, message);
+  });
+
+program
+  .command("update")
+  .description("Update FreeTurtle to the latest version")
+  .action(async () => {
+    await runUpdate();
   });
 
 program
