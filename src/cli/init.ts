@@ -79,6 +79,7 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: string;
     onchain: boolean;
     rpcUrl: string;
+    contracts: { name: string; address: string }[];
   }
 
   const state: State = {
@@ -100,6 +101,7 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: "",
     onchain: false,
     rpcUrl: "",
+    contracts: [],
   };
 
   const steps: (() => Promise<boolean>)[] = [
@@ -292,6 +294,55 @@ export async function runInit(dir: string): Promise<void> {
         const url = await promptWithExisting({ message: "Base RPC URL", existing: existingEnv.RPC_URL, placeholder: "https://mainnet.base.org" });
         if (p.isCancel(url)) { state.onchain = false; return true; }
         state.rpcUrl = url;
+
+        // Collect smart contracts
+        const addContracts = await p.confirm({
+          message: "Add smart contracts for your CEO to track?",
+          initialValue: state.contracts.length > 0,
+        });
+        if (p.isCancel(addContracts)) return true;
+
+        if (addContracts) {
+          p.note(
+            [
+              "Add contracts your business uses on Base.",
+              "Your CEO will be able to read data from these.",
+              "",
+              "You can add more later by editing soul.md.",
+            ].join("\n"),
+            "Smart contracts"
+          );
+
+          let adding = true;
+          while (adding) {
+            const name = await p.text({
+              message: "Contract name",
+              placeholder: "e.g. MyToken, Marketplace, NFT Collection",
+              validate: (v) => (v?.trim() ? undefined : "Required"),
+            });
+            if (p.isCancel(name)) break;
+
+            const address = await p.text({
+              message: "Contract address",
+              placeholder: "0x...",
+              validate: (v) => {
+                if (!v?.trim()) return "Required";
+                if (!/^0x[a-fA-F0-9]{40}$/.test(v.trim())) return "Must be a valid 0x address (42 characters)";
+                return undefined;
+              },
+            });
+            if (p.isCancel(address)) break;
+
+            state.contracts.push({ name, address });
+            p.log.success(`Added ${name} (${address})`);
+
+            const more = await p.confirm({
+              message: "Add another contract?",
+              initialValue: false,
+            });
+            if (p.isCancel(more) || !more) adding = false;
+          }
+        }
       }
       return true;
     },
@@ -335,7 +386,7 @@ ${VOICE[state.voice] ?? VOICE.casual}
 
 ## Knowledge
 ${state.description}
-
+${state.contracts.length > 0 ? `\n### Smart Contracts (Base)\n${state.contracts.map((c) => `- ${c.name}: \`${c.address}\``).join("\n")}\n` : ""}
 ## Goals
 - Grow the project and community
 - Create engaging content

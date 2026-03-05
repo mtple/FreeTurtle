@@ -42,8 +42,8 @@ const PROVIDERS: Record<LLMProvider, ProviderInfo> = {
     credPrompt: "OpenAI API key",
   },
   claude_subscription: {
-    label: "Anthropic (subscription)",
-    hint: "Pro/Max auth token",
+    label: "Claude Pro/Max",
+    hint: "recommended — use your existing subscription",
     credEnv: "ANTHROPIC_AUTH_TOKEN",
     credField: "oauthToken",
     credEnvField: "oauth_token_env",
@@ -51,8 +51,8 @@ const PROVIDERS: Record<LLMProvider, ProviderInfo> = {
     credPrompt: "Anthropic auth token",
   },
   openai_subscription: {
-    label: "OpenAI (subscription)",
-    hint: "OAuth token",
+    label: "ChatGPT Plus/Pro",
+    hint: "recommended — use your existing subscription",
     credEnv: "OPENAI_OAUTH_TOKEN",
     credField: "oauthToken",
     credEnvField: "oauth_token_env",
@@ -62,11 +62,11 @@ const PROVIDERS: Record<LLMProvider, ProviderInfo> = {
 };
 
 const PROVIDER_ORDER: LLMProvider[] = [
-  "claude_api",
-  "openrouter",
-  "openai_api",
   "claude_subscription",
   "openai_subscription",
+  "claude_api",
+  "openai_api",
+  "openrouter",
 ];
 
 export async function runSetup(dir: string): Promise<void> {

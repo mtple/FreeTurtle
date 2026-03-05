@@ -22,7 +22,7 @@ FreeTurtle gives you an autonomous AI operator that:
 - **Chats with you** via Terminal or Telegram
 - **Writes strategy briefs** weekly
 - **Queries databases** (read-only Postgres)
-- **Creates GitHub issues** and commits files
+- **Creates GitHub issues, writes code and submits pull requests**
 - **Reads onchain data** (balances, contracts, transactions on Base)
 - **Stores identity and memory** as readable Markdown and JSON files
 
