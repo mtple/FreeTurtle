@@ -40,33 +40,43 @@ All three route to the same **task runner**, which:
 2. Loads recent memory (posting log, post queue)
 3. Collects tools from active modules
 4. Calls the LLM (Claude or OpenAI)
-5. Handles tool calls in a loop
-6. Persists results to workspace files
+5. Checks policy allowlists and approval requirements before executing tools
+6. Handles tool calls in a loop (with automatic retry on transient failures)
+7. Logs every tool call to the audit trail
+8. Persists results to workspace files
 
 ```
-┌─────────────────────────────────────────┐
-│              FreeTurtle Daemon           │
-│                                         │
-│  ┌──────────┐  ┌──────────┐  ┌───────┐ │
-│  │ Scheduler │  │ Channels │  │  IPC  │ │
-│  │  (cron)   │  │ Terminal │  │ send  │ │
-│  │           │  │ Telegram │  │       │ │
-│  └─────┬─────┘  └────┬─────┘  └───┬───┘ │
-│        │             │            │     │
-│        └──────┬──────┘────────────┘     │
-│               ▼                         │
-│        ┌──────────────┐                 │
-│        │  Task Runner  │                │
-│        │  soul + memory│                │
-│        │  + LLM + tools│                │
-│        └──────┬───────┘                 │
-│               ▼                         │
-│  ┌──────────────────────────────┐       │
-│  │         Modules              │       │
-│  │ Farcaster │ Database│ GitHub │       │
-│  │ Onchain   │  XMTP   │       │       │
-│  └──────────────────────────────┘       │
-└─────────────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│                FreeTurtle Daemon               │
+│                                               │
+│  ┌──────────┐  ┌──────────┐  ┌─────────────┐ │
+│  │ Scheduler │  │ Channels │  │     IPC     │ │
+│  │  (cron)   │  │ Terminal │  │ send/approve│ │
+│  │           │  │ Telegram │  │   /reject   │ │
+│  └─────┬─────┘  └────┬─────┘  └──────┬──────┘ │
+│        │             │               │        │
+│        └──────┬──────┘───────────────┘        │
+│               ▼                               │
+│        ┌──────────────┐                       │
+│        │  Task Runner  │                      │
+│        │  soul + memory│                      │
+│        │  + LLM + tools│                      │
+│        └──────┬───────┘                       │
+│               ▼                               │
+│  ┌─────────────────────────────────────┐      │
+│  │      Policy ─► Approval ─► Retry   │      │
+│  │  allowlists   owner gate   backoff  │      │
+│  └──────────────────┬──────────────────┘      │
+│                     ▼                         │
+│  ┌─────────────────────────────────────┐      │
+│  │            Modules                  │      │
+│  │ Farcaster │ Database│ GitHub│Onchain│      │
+│  └─────────────────────────────────────┘      │
+│                     │                         │
+│               ┌─────▼─────┐                   │
+│               │ Audit Log │                   │
+│               └───────────┘                   │
+└───────────────────────────────────────────────┘
 ```
 
 ## Modules
@@ -104,7 +114,7 @@ Create issues, list issues, and commit files.
 |------|-------------|
 | `create_issue` | Create an issue on a repo |
 | `list_issues` | List issues for a repo |
-| `commit_file` | Create or update a file via commit |
+| `commit_file` | Create or update a file via commit (main branch requires approval) |
 
 **Env:** `GITHUB_TOKEN`
 
@@ -170,7 +180,17 @@ Controls the daemon. Markdown format:
 
 ### database
 - enabled: true
+
+## Policy
+### github
+- approval_required_branches: main
+
+### approvals
+- timeout_seconds: 300
+- fail_mode: deny
 ```
+
+The setup wizard (`freeturtle setup`) supports five LLM providers: Claude Pro/Max (subscription), ChatGPT Plus/Pro (subscription), Anthropic API, OpenAI API, and OpenRouter.
 
 ### .env
 
@@ -192,8 +212,8 @@ RPC_URL=https://mainnet.base.org
 
 ```bash
 freeturtle init              # Set up a new operator
-freeturtle start             # Start the daemon (terminal chat by default)
-freeturtle start --chat      # Start with interactive chat mode
+freeturtle start             # Start the daemon
+freeturtle start --chat      # Start with interactive terminal chat
 freeturtle status            # Show daemon status
 freeturtle send "message"    # Send a message to the running operator
 freeturtle setup             # Reconfigure LLM provider
@@ -201,6 +221,8 @@ freeturtle connect farcaster # Set up Farcaster signer
 freeturtle approvals         # List pending approval requests
 freeturtle approve <id>      # Approve a pending action
 freeturtle reject <id>       # Reject a pending action
+freeturtle update            # Update to the latest version
+freeturtle install-service   # Install as a systemd service (Linux)
 ```
 
 ## Hosting
