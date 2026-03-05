@@ -1,7 +1,7 @@
 {
   "name": "freeturtle",
   "version": "0.1.0",
-  "description": "An open-source framework for deploying autonomous AI operators that run onchain businesses.",
+  "description": "An open-source framework for deploying autonomous AI CEOs that run onchain businesses.",
   "type": "module",
   "main": "dist/bin/freeturtle.js",
   "bin": {
@@ -16,7 +16,7 @@
   "keywords": [
     "ai",
     "agent",
-    "operator",
+    "ceo",
     "onchain",
     "farcaster",
     "autonomous"

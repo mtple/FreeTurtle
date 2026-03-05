@@ -1,8 +1,6 @@
 # FreeTurtle
 
-An open-source framework for deploying autonomous AI operators that run onchain businesses.
-
-Built by the team behind [tortOS](https://tortoise.xyz) — the system that runs **Tortoise**, the most-used music platform on Farcaster/Base ($34K+ value, 200+ artists).
+An open-source framework for deploying autonomous AI CEOs that run onchain businesses.
 
 ## Quick Start
 
@@ -16,7 +14,7 @@ The setup wizard walks you through everything: naming your AI CEO, connecting Fa
 
 ## What It Does
 
-FreeTurtle gives you an autonomous AI operator that:
+FreeTurtle gives you an autonomous AI CEO that:
 
 - **Posts to Farcaster** on a schedule (or on demand)
 - **Chats with you** via Terminal or Telegram
@@ -32,11 +30,11 @@ FreeTurtle is a Node.js daemon that mostly sleeps and wakes up when:
 
 1. A **cron timer** fires (e.g. "post to Farcaster every 8 hours")
 2. A **heartbeat** fires (e.g. "check if anything needs attention every 30 minutes")
-3. The **owner sends a message** via Terminal or Telegram
+3. The **founder sends a message** via Terminal or Telegram
 
 All three route to the same **task runner**, which:
 
-1. Loads `soul.md` (the operator's identity and voice)
+1. Loads `soul.md` (the CEO's identity and voice)
 2. Loads recent memory (posting log, post queue)
 3. Collects tools from active modules
 4. Calls the LLM (Claude or OpenAI)
@@ -65,7 +63,7 @@ All three route to the same **task runner**, which:
 │               ▼                               │
 │  ┌─────────────────────────────────────┐      │
 │  │      Policy ─► Approval ─► Retry   │      │
-│  │  allowlists   owner gate   backoff  │      │
+│  │  allowlists   founder gate  backoff  │      │
 │  └──────────────────┬──────────────────┘      │
 │                     ▼                         │
 │  ┌─────────────────────────────────────┐      │
@@ -91,7 +89,7 @@ Post and read casts via the Neynar API.
 | `read_channel` | Read recent casts from a channel |
 | `read_mentions` | Read notifications and mentions |
 | `reply_to_cast` | Reply to a cast by hash |
-| `delete_cast` | Delete a cast (requires owner approval) |
+| `delete_cast` | Delete a cast (requires founder approval) |
 
 **Env:** `NEYNAR_API_KEY`, `FARCASTER_SIGNER_UUID`, `FARCASTER_FID`
 
@@ -136,7 +134,7 @@ FreeTurtle stores everything in `~/.freeturtle/`:
 
 ```
 ~/.freeturtle/
-├── soul.md              # Operator identity and voice
+├── soul.md              # CEO identity and voice
 ├── config.md            # Modules, cron schedules, LLM settings
 ├── .env                 # API keys and secrets
 └── workspace/
@@ -152,7 +150,7 @@ FreeTurtle stores everything in `~/.freeturtle/`:
 
 ### soul.md
 
-Defines who your operator is — name, voice, knowledge, goals, and boundaries. Written in plain Markdown. Edit it anytime.
+Defines who your CEO is — name, voice, knowledge, goals, and boundaries. Written in plain Markdown. Edit it anytime.
 
 ### config.md
 
@@ -211,11 +209,11 @@ RPC_URL=https://mainnet.base.org
 ## CLI Commands
 
 ```bash
-freeturtle init              # Set up a new operator
+freeturtle init              # Set up a new AI CEO
 freeturtle start             # Start the daemon
 freeturtle start --chat      # Start with interactive terminal chat
 freeturtle status            # Show daemon status
-freeturtle send "message"    # Send a message to the running operator
+freeturtle send "message"    # Send a message to the running CEO
 freeturtle setup             # Reconfigure LLM provider
 freeturtle connect farcaster # Set up Farcaster signer
 freeturtle approvals         # List pending approval requests
@@ -239,18 +237,18 @@ freeturtle install-service  # auto-restart on reboot
 
 ## Before You Begin
 
-**Create a separate account for your operator.** Start with a Google account, then use it to sign up for:
+**Create a separate account for your CEO.** Start with a Google account, then use it to sign up for:
 
-- Farcaster (the account your operator will post from)
+- Farcaster (the account your CEO will post from)
 - Neynar (API access for Farcaster)
-- GitHub (if your operator will manage repos)
-- Any other services your operator needs
+- GitHub (if your CEO will manage repos)
+- Any other services your CEO needs
 
-The operator is effectively a team member who needs its own accounts. Identity separation keeps things clean.
+The CEO is effectively a team member who needs its own accounts. Identity separation keeps things clean.
 
 ## Policy & Approvals
 
-FreeTurtle enforces per-module allowlists and requires owner approval for destructive actions.
+FreeTurtle enforces per-module allowlists and requires founder approval for destructive actions.
 
 ### Policy Config
 
@@ -282,7 +280,7 @@ Add a `## Policy` section to `config.md`:
 
 ### Approval Flow
 
-Some actions require owner approval before execution:
+Some actions require founder approval before execution:
 
 - `delete_cast` — always requires approval
 - `commit_file` to a protected branch (default: `main`) — requires approval
@@ -315,20 +313,20 @@ All external API calls (Neynar, GitHub, Postgres, BaseScan, RPC) are wrapped wit
 
 FreeTurtle is designed to be safe to run locally:
 
-- **No shell execution** — the operator cannot run arbitrary commands
+- **No shell execution** — the CEO cannot run arbitrary commands
 - **Closed tool set** — only the tools defined by enabled modules are available
 - **Policy allowlists** — per-module restrictions on repos, paths, channels, contracts
-- **Owner approval** — destructive actions require explicit approval before execution
+- **Founder approval** — destructive actions require explicit approval before execution
 - **Read-only database** — all SQL runs in read-only transactions
 - **Read-only onchain** — no wallet, no signing, no transactions
-- **Owner-only chat** — Telegram only responds to the configured owner ID
+- **Founder-only chat** — Telegram only responds to the configured founder ID
 - **Audit trail** — every tool call is logged with redacted inputs
 
 ## Security Best Practices
 
 ### Secrets
 
-Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it to `chmod 600` (owner-read-only) when writing it.
+Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it to `chmod 600` (read-only by the file owner) when writing it.
 
 - **Never commit `.env` to git.** It's in `.gitignore` by default — don't override this.
 - **Never paste secrets into AI coding tools.** Tools like Claude Code, Codex, Cursor, and Copilot may log or transmit your input. If an AI tool asks you to paste an API key, token, or recovery phrase into chat — don't. Enter secrets only through FreeTurtle's setup wizard, which writes directly to `.env` on your local machine.
@@ -361,14 +359,14 @@ Your cloud provider (Oracle, AWS, GCP) has full access to the underlying infrast
 
 ## The Two-Turtle Vision (v0.2)
 
-The current v0.1 is a single-process operator. v0.2 will split it into two:
+The current v0.1 is a single-process CEO. v0.2 will split it into two:
 
 - **Inner Turtle** — has all the tools, writes to an outbox, never posts directly
 - **Outer Turtle** — reads the outbox, reviews actions, executes approved ones
 
 This creates **security by architecture, not by instruction**. The inner turtle can reason freely without risk because it literally cannot post or commit — only propose. The outer turtle is a simple approval layer.
 
-This pattern, proven by tortOS, means you can give your operator powerful tools without worrying about rogue actions.
+This pattern, proven by tortOS, means you can give your CEO powerful tools without worrying about rogue actions.
 
 ## tortOS — Proof of Concept
 
@@ -384,10 +382,10 @@ tortOS has been running autonomously for months. FreeTurtle packages those patte
 
 ## Roadmap
 
-- **v0.1** — Single-process operator (this release)
+- **v0.1** — Single-process CEO (this release)
 - **v0.2** — Two-turtle architecture (inner/outer split, outbox, approval queue)
 - **v0.3** — XMTP integration (public-facing DMs)
-- **Future** — Hosted dashboard, multi-operator management
+- **Future** — Hosted dashboard, multi-CEO management
 
 ## License
 

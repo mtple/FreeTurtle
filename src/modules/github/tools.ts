@@ -45,7 +45,7 @@ export const githubTools: ToolDefinition[] = [
   {
     name: "commit_file",
     description:
-      "Create or update a file in a GitHub repository via a commit. Writes to non-main branches are allowed if in scope. Writes to main require owner approval.",
+      "Create or update a file in a GitHub repository via a commit. Writes to non-main branches are allowed if in scope. Writes to main require founder approval.",
     input_schema: {
       type: "object",
       properties: {

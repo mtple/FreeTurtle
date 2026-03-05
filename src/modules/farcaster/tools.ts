@@ -47,7 +47,7 @@ export const farcasterTools: ToolDefinition[] = [
   {
     name: "read_mentions",
     description:
-      "Read recent notifications and mentions for the operator's Farcaster account.",
+      "Read recent notifications and mentions for the CEO's Farcaster account.",
     input_schema: {
       type: "object",
       properties: {
@@ -81,7 +81,7 @@ export const farcasterTools: ToolDefinition[] = [
   {
     name: "delete_cast",
     description:
-      "Delete a cast by its hash. This action requires owner approval and cannot be undone.",
+      "Delete a cast by its hash. This action requires founder approval and cannot be undone.",
     input_schema: {
       type: "object",
       properties: {

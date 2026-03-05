@@ -230,7 +230,7 @@ export async function runInit(dir: string): Promise<void> {
           [
             "1. Go to github.com/settings/tokens",
             "2. Generate new token → Fine-grained token",
-            "3. Select the repos your operator should access",
+            "3. Select the repos your CEO should access",
             "4. Grant permissions: Issues (read/write), Contents (read/write)",
             "5. Copy the token — you won't see it again",
           ].join("\n"),
@@ -254,7 +254,7 @@ export async function runInit(dir: string): Promise<void> {
       if (enable) {
         p.note(
           [
-            "Provide a Postgres connection string. The operator can only",
+            "Provide a Postgres connection string. The CEO can only",
             "run read-only queries — all writes are blocked.",
             "",
             "Supabase: Settings → Database → Connection string (URI)",

@@ -15,7 +15,7 @@ export class TelegramChannel implements Channel {
     this.bot.on("message:text", async (ctx) => {
       const senderId = ctx.from?.id;
       if (senderId !== this.ownerId) {
-        await ctx.reply("Sorry, I only talk to my owner.");
+        await ctx.reply("Sorry, I only talk to my founder.");
         return;
       }
 

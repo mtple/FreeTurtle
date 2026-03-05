@@ -270,7 +270,7 @@ export class TaskRunner {
         const approvalReq = await this.approvalManager.createRequest({
           runId,
           toolName: call.name,
-          reason: `Tool "${call.name}" requires owner approval`,
+          reason: `Tool "${call.name}" requires founder approval`,
           input: redactedInput,
           timeoutSeconds,
         });
@@ -279,7 +279,7 @@ export class TaskRunner {
           `Approval required for ${call.name} — request ${approvalReq.id}`
         );
 
-        // Notify owner through channels
+        // Notify founder through channels
         if (this.onApprovalNeeded) {
           this.onApprovalNeeded(
             `⚠️ Approval needed: ${call.name}\n` +

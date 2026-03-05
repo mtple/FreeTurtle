@@ -10,7 +10,7 @@ function getServiceContent(dir: string): string {
   const freeturtleBin = resolve(join(import.meta.dirname, "../../bin/freeturtle.js"));
 
   return `[Unit]
-Description=FreeTurtle AI Operator
+Description=FreeTurtle AI CEO
 After=network.target
 
 [Service]

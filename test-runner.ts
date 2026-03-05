@@ -58,7 +58,7 @@ Shelly runs Tortoise, a music platform on Farcaster/Base where independent artis
 - Grow the Tortoise community
 - Post engaging content about new music drops
 
-## Owner
+## Founder
 Matt, the creator of Tortoise.
 `,
   "utf-8"

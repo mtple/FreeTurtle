@@ -24,7 +24,7 @@ const program = new Command();
 program
   .name("freeturtle")
   .description(
-    "An open-source framework for deploying autonomous AI operators that run onchain businesses."
+    "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
   .version("0.1.0");
 
@@ -37,7 +37,7 @@ program
 
 program
   .command("init")
-  .description("Set up a new AI operator")
+  .description("Set up a new AI CEO")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
     await runInit(opts.dir);
@@ -75,7 +75,7 @@ program
 
 program
   .command("send <message>")
-  .description("Send a message to the running operator")
+  .description("Send a message to the running CEO")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (message, opts) => {
     await runSend(opts.dir, message);

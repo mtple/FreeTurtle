@@ -120,7 +120,7 @@ npm install -g pnpm
 pnpm install -g freeturtle
 ```
 
-### Set Up Your Operator
+### Set Up Your CEO
 ```bash
 freeturtle init
 ```
