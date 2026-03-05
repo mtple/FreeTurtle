@@ -8,6 +8,8 @@ import { runStart } from "../src/cli/start.js";
 import { runStatus } from "../src/cli/status.js";
 import { runSend } from "../src/cli/send.js";
 import { runSetup } from "../src/setup.js";
+import { connectFarcaster } from "../src/cli/connect-farcaster.js";
+import { runInstallService } from "../src/cli/install-service.js";
 
 const DEFAULT_DIR = join(homedir(), ".freeturtle");
 
@@ -71,6 +73,26 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (message, opts) => {
     await runSend(opts.dir, message);
+  });
+
+program
+  .command("install-service")
+  .description("Install FreeTurtle as a systemd user service (Linux)")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    await runInstallService(opts.dir);
+  });
+
+const connect = program
+  .command("connect")
+  .description("Connect external services");
+
+connect
+  .command("farcaster")
+  .description("Set up Farcaster signer with QR code approval")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    await connectFarcaster(opts.dir);
   });
 
 program.parse();

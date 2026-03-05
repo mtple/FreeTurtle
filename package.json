@@ -28,6 +28,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.3.3",
     "@types/pg": "^8.18.0",
+    "@types/qrcode-terminal": "^0.12.2",
     "eslint": "^10.0.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
@@ -35,6 +36,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@clack/prompts": "^1.1.0",
+    "@farcaster/hub-nodejs": "^0.15.10",
     "@octokit/rest": "^22.0.1",
     "commander": "^14.0.3",
     "croner": "^10.0.1",
@@ -42,6 +44,7 @@
     "grammy": "^1.41.1",
     "openai": "^6.25.0",
     "pg": "^8.19.0",
+    "qrcode-terminal": "^0.12.0",
     "viem": "^2.46.3"
   }
 }

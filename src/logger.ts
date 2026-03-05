@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -13,7 +14,8 @@ export interface Logger {
 const LEVEL_ORDER: LogLevel[] = ["debug", "info", "warn", "error"];
 
 export function createLogger(dir?: string): Logger {
-  const logPath = dir ? join(dir, "workspace", "freeturtle.log") : null;
+  const logDir = join(tmpdir(), "freeturtle");
+  const logPath = dir ? join(logDir, "freeturtle.log") : null;
   let logFileReady = false;
 
   function formatLine(level: LogLevel, msg: string): string {
@@ -24,7 +26,7 @@ export function createLogger(dir?: string): Logger {
   async function writeToFile(line: string): Promise<void> {
     if (!logPath) return;
     if (!logFileReady) {
-      await mkdir(dirname(logPath), { recursive: true });
+      await mkdir(logDir, { recursive: true });
       logFileReady = true;
     }
     await appendFile(logPath, line + "\n", "utf-8");

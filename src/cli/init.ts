@@ -1,10 +1,50 @@
 import * as p from "@clack/prompts";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runSetup } from "../setup.js";
+import { connectFarcaster } from "./connect-farcaster.js";
+
+/** Prompt for a value, offering to reuse an existing one from .env */
+async function promptWithExisting(opts: {
+  message: string;
+  existing?: string;
+  placeholder?: string;
+  mask?: boolean;
+}): Promise<string | symbol> {
+  if (opts.existing) {
+    const display = opts.mask
+      ? "••••" + opts.existing.slice(-4)
+      : opts.existing.length > 20
+        ? opts.existing.slice(0, 20) + "..."
+        : opts.existing;
+    const reuse = await p.confirm({
+      message: `${opts.message}: use existing? (${display})`,
+      initialValue: true,
+    });
+    if (p.isCancel(reuse)) return reuse;
+    if (reuse) return opts.existing;
+  }
+  return p.text({
+    message: opts.message,
+    placeholder: opts.placeholder,
+    validate: (v) => (v?.trim() ? undefined : "Required"),
+  });
+}
 
 export async function runInit(dir: string): Promise<void> {
   p.intro("FreeTurtle");
+
+  // Load existing .env values
+  const existingEnv: Record<string, string> = {};
+  try {
+    const content = await readFile(join(dir, ".env"), "utf-8");
+    for (const line of content.split("\n")) {
+      const match = line.match(/^([A-Z_]+)=(.+)$/);
+      if (match) existingEnv[match[1]] = match[2];
+    }
+  } catch {
+    // No existing .env
+  }
 
   p.note(
     [
@@ -12,8 +52,8 @@ export async function runInit(dir: string): Promise<void> {
       "posts content, chats with you, writes strategy, and runs",
       "operations for your project.",
       "",
-      "You can always change these settings later by editing the",
-      "files in ~/.freeturtle/",
+      "You can always re-run init or edit the files directly",
+      "in ~/.freeturtle/ to change settings.",
     ].join("\n"),
     "Welcome"
   );
@@ -133,32 +173,14 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(enable)) return false;
       state.farcaster = enable;
       if (enable) {
-        p.note(
-          [
-            "You need three things from Neynar + Warpcast:",
-            "",
-            "1. API key — sign up at dev.neynar.com (free tier: 200K compute units/month)",
-            "2. Signer UUID — create one with:",
-            '   curl -X POST https://api.neynar.com/v2/farcaster/signer \\',
-            '     -H "x-api-key: YOUR_API_KEY"',
-            "   Then open the signer_approval_url and approve in Warpcast.",
-            "   Reuse this signer — each new one costs an onchain transaction.",
-            "3. FID — open Warpcast → your profile → three dots → About",
-          ].join("\n"),
-          "Farcaster setup"
-        );
-
-        const key = await p.text({ message: "  Neynar API key", validate: (v) => (v?.trim() ? undefined : "Required") });
-        if (p.isCancel(key)) { state.farcaster = false; return true; }
-        state.neynarKey = key;
-
-        const signer = await p.text({ message: "  Farcaster signer UUID", validate: (v) => (v?.trim() ? undefined : "Required") });
-        if (p.isCancel(signer)) { state.farcaster = false; return true; }
-        state.signerUuid = signer;
-
-        const fid = await p.text({ message: "  Farcaster FID (optional)", placeholder: "press Enter to skip" });
-        if (p.isCancel(fid)) { state.farcaster = false; return true; }
-        state.fid = fid;
+        const result = await connectFarcaster(dir);
+        if (result) {
+          state.neynarKey = result.neynarKey;
+          state.signerUuid = result.signerUuid;
+          state.fid = result.fid;
+        } else {
+          state.farcaster = false;
+        }
       }
       return true;
     },
@@ -183,11 +205,11 @@ export async function runInit(dir: string): Promise<void> {
           "Telegram setup"
         );
 
-        const token = await p.text({ message: "  Bot token", validate: (v) => (v?.trim() ? undefined : "Required") });
+        const token = await promptWithExisting({ message: "Bot token", existing: existingEnv.TELEGRAM_BOT_TOKEN, mask: true });
         if (p.isCancel(token)) { state.telegram = false; return true; }
         state.telegramToken = token;
 
-        const owner = await p.text({ message: "  Your Telegram user ID", validate: (v) => (v?.trim() ? undefined : "Required") });
+        const owner = await promptWithExisting({ message: "Your Telegram user ID (numeric, from @userinfobot)", existing: existingEnv.TELEGRAM_OWNER_ID });
         if (p.isCancel(owner)) { state.telegram = false; return true; }
         state.telegramOwner = owner;
       }
@@ -213,7 +235,7 @@ export async function runInit(dir: string): Promise<void> {
           "GitHub setup"
         );
 
-        const token = await p.text({ message: "  GitHub personal access token", validate: (v) => (v?.trim() ? undefined : "Required") });
+        const token = await promptWithExisting({ message: "GitHub personal access token", existing: existingEnv.GITHUB_TOKEN, mask: true });
         if (p.isCancel(token)) { state.github = false; return true; }
         state.githubToken = token;
       }
@@ -239,11 +261,7 @@ export async function runInit(dir: string): Promise<void> {
           "Database setup"
         );
 
-        const url = await p.text({
-          message: "  Database connection URL",
-          placeholder: "postgres://user:pass@host:5432/dbname",
-          validate: (v) => (v?.trim() ? undefined : "Required"),
-        });
+        const url = await promptWithExisting({ message: "Database connection URL", existing: existingEnv.DATABASE_URL, placeholder: "postgres://user:pass@host:5432/dbname", mask: true });
         if (p.isCancel(url)) { state.database = false; return true; }
         state.dbUrl = url;
       }
@@ -263,18 +281,15 @@ export async function runInit(dir: string): Promise<void> {
             "Provide a Base mainnet RPC URL. Read-only — no wallet or signing.",
             "",
             "Free options:",
-            "  Public:  https://mainnet.base.org",
-            "  Alchemy: sign up at alchemy.com for higher rate limits",
-            "  Infura:  sign up at infura.io",
+            "  Public:   https://mainnet.base.org",
+            "  Coinbase: sign up at portal.cdp.coinbase.com",
+            "  Alchemy:  sign up at alchemy.com",
+            "  Infura:   sign up at infura.io",
           ].join("\n"),
           "Onchain setup"
         );
 
-        const url = await p.text({
-          message: "  Base RPC URL",
-          placeholder: "https://mainnet.base.org",
-          validate: (v) => (v?.trim() ? undefined : "Required"),
-        });
+        const url = await promptWithExisting({ message: "Base RPC URL", existing: existingEnv.RPC_URL, placeholder: "https://mainnet.base.org" });
         if (p.isCancel(url)) { state.onchain = false; return true; }
         state.rpcUrl = url;
       }
@@ -282,19 +297,13 @@ export async function runInit(dir: string): Promise<void> {
     },
   ];
 
-  // Run steps with Ctrl+C = go back
-  let i = 0;
-  while (i < steps.length) {
+  // Run steps — Ctrl+C exits immediately
+  for (let i = 0; i < steps.length; i++) {
     const ok = await steps[i]();
     if (!ok) {
-      if (i === 0) {
-        p.cancel("Setup cancelled.");
-        process.exit(0);
-      }
-      i--; // go back
-      continue;
+      p.cancel("Setup cancelled.");
+      process.exit(0);
     }
-    i++;
   }
 
   // --- Generate workspace ---
