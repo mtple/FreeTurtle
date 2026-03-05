@@ -40,7 +40,7 @@ export async function loadConfig(dir: string): Promise<FreeTurtleConfig> {
     raw = await readFile(configPath, "utf-8");
   } catch (err: unknown) {
     if (err instanceof Error && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`config.md not found at ${configPath}. Run 'freeturtle init' to create one.`);
+      throw new Error(`config.md not found at ${configPath}. Run 'freeturtle init' to create one.`, { cause: err });
     }
     throw err;
   }
@@ -49,7 +49,7 @@ export async function loadConfig(dir: string): Promise<FreeTurtleConfig> {
 
 function parseConfig(raw: string): FreeTurtleConfig {
   const config: FreeTurtleConfig = {
-    llm: { provider: "anthropic", model: "claude-sonnet-4-5-20250929", max_tokens: 4096 },
+    llm: { provider: "claude_api", model: "claude-sonnet-4-5-20250514", max_tokens: 4096 },
     cron: {},
     channels: {},
     modules: {},

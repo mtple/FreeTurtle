@@ -1,216 +1,359 @@
-import * as readline from "node:readline/promises";
-import { stdin, stdout } from "node:process";
+import * as p from "@clack/prompts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runSetup } from "../setup.js";
 
-const VOICE_PRESETS: Record<string, string> = {
-  casual:
-    "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
-  professional:
-    "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
-  minimalist:
-    "- Brief and direct\n- Says more with less\n- No fluff, no filler",
-};
-
 export async function runInit(dir: string): Promise<void> {
-  const rl = readline.createInterface({ input: stdin, output: stdout });
+  p.intro("FreeTurtle");
 
-  try {
-    console.log("\n  Let's set up your AI operator.\n");
+  p.note(
+    [
+      "You're about to create an AI CEO — an autonomous agent that",
+      "posts content, chats with you, writes strategy, and runs",
+      "operations for your project.",
+      "",
+      "You can always change these settings later by editing the",
+      "files in ~/.freeturtle/",
+    ].join("\n"),
+    "Welcome"
+  );
 
+  // --- Step-based flow with back support ---
+
+  interface State {
+    projectName: string;
+    description: string;
+    ceoName: string;
+    voice: string;
+    founderName: string;
+    farcaster: boolean;
+    neynarKey: string;
+    signerUuid: string;
+    fid: string;
+    telegram: boolean;
+    telegramToken: string;
+    telegramOwner: string;
+    github: boolean;
+    githubToken: string;
+    database: boolean;
+    dbUrl: string;
+    onchain: boolean;
+    rpcUrl: string;
+  }
+
+  const state: State = {
+    projectName: "",
+    description: "",
+    ceoName: "",
+    voice: "casual",
+    founderName: "",
+    farcaster: false,
+    neynarKey: "",
+    signerUuid: "",
+    fid: "",
+    telegram: false,
+    telegramToken: "",
+    telegramOwner: "",
+    github: false,
+    githubToken: "",
+    database: false,
+    dbUrl: "",
+    onchain: false,
+    rpcUrl: "",
+  };
+
+  const steps: (() => Promise<boolean>)[] = [
     // 1. Project name
-    const projectName = await rl.question("  What's your project called?\n  > ");
-    if (!projectName.trim()) {
-      console.log("  Cancelled.");
-      return;
-    }
-
+    async () => {
+      const result = await p.text({
+        message: "What project will this AI CEO be running?",
+        placeholder: "e.g. Tortoise, Acme Corp, My Newsletter",
+        defaultValue: state.projectName || undefined,
+        validate: (v) => (v?.trim() ? undefined : "Required"),
+      });
+      if (p.isCancel(result)) return false;
+      state.projectName = result;
+      return true;
+    },
     // 2. Description
-    const description = await rl.question(
-      "\n  Describe your project in a sentence or two:\n  > "
-    );
-
-    // 3. Operator name
-    const operatorName = await rl.question(
-      "\n  What should your operator be called?\n  > "
-    );
-
+    async () => {
+      const result = await p.text({
+        message: "Describe the project in a sentence or two.",
+        placeholder: "A music platform on Farcaster/Base for independent artists",
+        defaultValue: state.description || undefined,
+      });
+      if (p.isCancel(result)) return false;
+      state.description = result;
+      return true;
+    },
+    // 3. CEO name
+    async () => {
+      const result = await p.text({
+        message: "What should your AI CEO be called?",
+        placeholder: "e.g. Shelly, Atlas, Nova",
+        defaultValue: state.ceoName || undefined,
+        validate: (v) => (v?.trim() ? undefined : "Required"),
+      });
+      if (p.isCancel(result)) return false;
+      state.ceoName = result;
+      return true;
+    },
     // 4. Voice
-    console.log("\n  How should your operator communicate?");
-    console.log("    1) Casual");
-    console.log("    2) Professional");
-    console.log("    3) Minimalist");
-    console.log("    4) Custom\n");
-    const voiceChoice = await rl.question("  Enter choice (1-4): ");
-    let voice: string;
-    if (voiceChoice.trim() === "4") {
-      voice = await rl.question("  Describe the voice:\n  > ");
-      voice = `- ${voice}`;
-    } else {
-      const key = ["casual", "professional", "minimalist"][
-        parseInt(voiceChoice.trim(), 10) - 1
-      ] ?? "casual";
-      voice = VOICE_PRESETS[key];
+    async () => {
+      const result = await p.select({
+        message: "How should your CEO communicate?",
+        options: [
+          { value: "casual", label: "Casual", hint: "friendly, like a smart friend" },
+          { value: "professional", label: "Professional", hint: "clear, authoritative, data-driven" },
+          { value: "minimalist", label: "Minimalist", hint: "brief and direct, no fluff" },
+        ],
+        initialValue: state.voice,
+      });
+      if (p.isCancel(result)) return false;
+      state.voice = result as string;
+      return true;
+    },
+    // 5. Founder name
+    async () => {
+      const result = await p.text({
+        message: "Your name (the founder).",
+        defaultValue: state.founderName || undefined,
+        validate: (v) => (v?.trim() ? undefined : "Required"),
+      });
+      if (p.isCancel(result)) return false;
+      state.founderName = result;
+      return true;
+    },
+    // 6. Farcaster
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect Farcaster? (post and read casts via Neynar)",
+        initialValue: state.farcaster,
+      });
+      if (p.isCancel(enable)) return false;
+      state.farcaster = enable;
+      if (enable) {
+        const key = await p.text({ message: "  Neynar API key", validate: (v) => (v?.trim() ? undefined : "Required") });
+        if (p.isCancel(key)) { state.farcaster = false; return true; }
+        state.neynarKey = key;
+
+        const signer = await p.text({ message: "  Farcaster signer UUID", validate: (v) => (v?.trim() ? undefined : "Required") });
+        if (p.isCancel(signer)) { state.farcaster = false; return true; }
+        state.signerUuid = signer;
+
+        const fid = await p.text({ message: "  Farcaster FID (optional)", placeholder: "press Enter to skip" });
+        if (p.isCancel(fid)) { state.farcaster = false; return true; }
+        state.fid = fid;
+      }
+      return true;
+    },
+    // 7. Telegram
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect Telegram? (chat with your CEO via bot)",
+        initialValue: state.telegram,
+      });
+      if (p.isCancel(enable)) return false;
+      state.telegram = enable;
+      if (enable) {
+        const token = await p.text({ message: "  Bot token", validate: (v) => (v?.trim() ? undefined : "Required") });
+        if (p.isCancel(token)) { state.telegram = false; return true; }
+        state.telegramToken = token;
+
+        const owner = await p.text({ message: "  Your Telegram user ID", validate: (v) => (v?.trim() ? undefined : "Required") });
+        if (p.isCancel(owner)) { state.telegram = false; return true; }
+        state.telegramOwner = owner;
+      }
+      return true;
+    },
+    // 8. GitHub
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect GitHub? (issues and file commits)",
+        initialValue: state.github,
+      });
+      if (p.isCancel(enable)) return false;
+      state.github = enable;
+      if (enable) {
+        const token = await p.text({ message: "  GitHub personal access token", validate: (v) => (v?.trim() ? undefined : "Required") });
+        if (p.isCancel(token)) { state.github = false; return true; }
+        state.githubToken = token;
+      }
+      return true;
+    },
+    // 9. Database
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect a database? (read-only Postgres queries)",
+        initialValue: state.database,
+      });
+      if (p.isCancel(enable)) return false;
+      state.database = enable;
+      if (enable) {
+        const url = await p.text({
+          message: "  Database connection URL",
+          placeholder: "postgres://user:pass@host:5432/dbname",
+          validate: (v) => (v?.trim() ? undefined : "Required"),
+        });
+        if (p.isCancel(url)) { state.database = false; return true; }
+        state.dbUrl = url;
+      }
+      return true;
+    },
+    // 10. Onchain
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect onchain? (read contracts and balances on Base)",
+        initialValue: state.onchain,
+      });
+      if (p.isCancel(enable)) return false;
+      state.onchain = enable;
+      if (enable) {
+        const url = await p.text({
+          message: "  Base RPC URL",
+          placeholder: "https://mainnet.base.org",
+          validate: (v) => (v?.trim() ? undefined : "Required"),
+        });
+        if (p.isCancel(url)) { state.onchain = false; return true; }
+        state.rpcUrl = url;
+      }
+      return true;
+    },
+  ];
+
+  // Run steps with Ctrl+C = go back
+  let i = 0;
+  while (i < steps.length) {
+    const ok = await steps[i]();
+    if (!ok) {
+      if (i === 0) {
+        p.cancel("Setup cancelled.");
+        process.exit(0);
+      }
+      i--; // go back
+      continue;
     }
+    i++;
+  }
 
-    // 5. Owner
-    const ownerName = await rl.question("\n  Your name (the owner):\n  > ");
+  // --- Generate workspace ---
 
-    // 6. Modules
-    console.log("\n  Which integrations do you want to enable?\n");
+  const s = p.spinner();
+  s.start("Creating workspace");
 
-    const farcaster = (await rl.question("  Connect Farcaster? (y/n): "))
-      .trim().toLowerCase() === "y";
-    let neynarKey = "", signerUuid = "", fid = "";
-    if (farcaster) {
-      neynarKey = (await rl.question("    Neynar API key: ")).trim();
-      signerUuid = (await rl.question("    Farcaster signer UUID: ")).trim();
-      fid = (await rl.question("    Farcaster FID: ")).trim();
-    }
+  await mkdir(join(dir, "workspace", "memory", "session-notes"), { recursive: true });
+  await mkdir(join(dir, "strategy"), { recursive: true });
 
-    const telegram = (await rl.question("  Connect Telegram? (y/n): "))
-      .trim().toLowerCase() === "y";
-    let telegramToken = "", telegramOwner = "";
-    if (telegram) {
-      telegramToken = (await rl.question("    Bot token: ")).trim();
-      telegramOwner = (await rl.question("    Your Telegram user ID: ")).trim();
-    }
+  const VOICE: Record<string, string> = {
+    casual:
+      "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
+    professional:
+      "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
+    minimalist:
+      "- Brief and direct\n- Says more with less\n- No fluff, no filler",
+  };
 
-    const github = (await rl.question("  Connect GitHub? (y/n): "))
-      .trim().toLowerCase() === "y";
-    let githubToken = "";
-    if (github) {
-      githubToken = (await rl.question("    GitHub token: ")).trim();
-    }
-
-    const database = (await rl.question("  Connect a database? (y/n): "))
-      .trim().toLowerCase() === "y";
-    let dbUrl = "";
-    if (database) {
-      dbUrl = (await rl.question("    Database URL: ")).trim();
-    }
-
-    const onchain = (await rl.question("  Connect onchain (Base)? (y/n): "))
-      .trim().toLowerCase() === "y";
-    let rpcUrl = "";
-    if (onchain) {
-      rpcUrl = (await rl.question("    RPC URL: ")).trim();
-    }
-
-    rl.close();
-
-    // Create directory structure
-    console.log(`\n  Creating workspace at ${dir}...\n`);
-    await mkdir(join(dir, "workspace", "memory", "session-notes"), { recursive: true });
-    await mkdir(join(dir, "strategy"), { recursive: true });
-
-    // Generate soul.md
-    const soulContent = `# ${operatorName.trim() || "Operator"}
+  await writeFile(
+    join(dir, "soul.md"),
+    `# ${state.ceoName}
 
 ## Identity
-${operatorName.trim()} is the AI operator for ${projectName.trim()}.
+${state.ceoName} is the AI CEO for ${state.projectName}.
 
 ## Voice
-${voice}
+${VOICE[state.voice] ?? VOICE.casual}
 
 ## Knowledge
-${description.trim()}
+${state.description}
 
 ## Goals
 - Grow the project and community
 - Create engaging content
-- Support the owner's strategic objectives
+- Develop and execute strategy
+- Support the founder's objectives
 
 ## Values & Boundaries
 - Be honest and transparent
 - Don't make claims you can't back up
-- Escalate to the owner when unsure
+- Escalate to the founder when unsure
 
-## Owner
-${ownerName.trim() || "The project creator"}.
-`;
-    await writeFile(join(dir, "soul.md"), soulContent, "utf-8");
+## Founder
+${state.founderName}.
+`,
+    "utf-8"
+  );
 
-    // Generate config.md
-    const configLines = [
-      "# FreeTurtle Config\n",
-      "## LLM",
-      "- provider: claude_api",
-      "- model: claude-sonnet-4-5-20250514",
-      "- max_tokens: 4096",
-      "- api_key_env: ANTHROPIC_API_KEY",
-      "",
-      "## Cron",
-      "### post",
-      "- schedule: 0 */8 * * *",
-      "- prompt: Check for any queued posts. If there's a new upload worth sharing, share it. Otherwise write an original post.",
-      "",
-      "### strategy",
-      "- schedule: 0 4 * * 0",
-      "- prompt: Analyze posting history, engagement, platform data. Write a strategy brief.",
-      "- output: strategy/{{date}}.md",
-      "",
-      "## Channels",
-      "### terminal",
-      "- enabled: true",
-      "",
-      "### telegram",
-      `- enabled: ${telegram}`,
-      "",
-      "## Modules",
-      "### farcaster",
-      `- enabled: ${farcaster}`,
-      ...(farcaster ? ["- channel: tortoise"] : []),
-      "",
-      "### database",
-      `- enabled: ${database}`,
-      "",
-      "### github",
-      `- enabled: ${github}`,
-      "",
-      "### onchain",
-      `- enabled: ${onchain}`,
-      "",
-    ];
-    await writeFile(join(dir, "config.md"), configLines.join("\n"), "utf-8");
+  const configLines = [
+    "# FreeTurtle Config\n",
+    "## LLM",
+    "- provider: claude_api",
+    "- model: claude-sonnet-4-5-20250514",
+    "- max_tokens: 4096",
+    "- api_key_env: ANTHROPIC_API_KEY",
+    "",
+    "## Cron",
+    "### post",
+    "- schedule: 0 */8 * * *",
+    "- prompt: Check for any queued posts. If there's a new upload worth sharing, share it. Otherwise write an original post.",
+    "",
+    "### strategy",
+    "- schedule: 0 4 * * 0",
+    "- prompt: Analyze posting history, engagement, platform data. Write a strategy brief.",
+    "- output: strategy/{{date}}.md",
+    "",
+    "## Channels",
+    "### terminal",
+    "- enabled: true",
+    "",
+    "### telegram",
+    `- enabled: ${state.telegram}`,
+    "",
+    "## Modules",
+    "### farcaster",
+    `- enabled: ${state.farcaster}`,
+    "",
+    "### database",
+    `- enabled: ${state.database}`,
+    "",
+    "### github",
+    `- enabled: ${state.github}`,
+    "",
+    "### onchain",
+    `- enabled: ${state.onchain}`,
+    "",
+  ];
+  await writeFile(join(dir, "config.md"), configLines.join("\n"), "utf-8");
 
-    // Generate .env
-    const envLines: string[] = [];
-    if (neynarKey) envLines.push(`NEYNAR_API_KEY=${neynarKey}`);
-    if (signerUuid) envLines.push(`FARCASTER_SIGNER_UUID=${signerUuid}`);
-    if (fid) envLines.push(`FARCASTER_FID=${fid}`);
-    if (telegramToken) envLines.push(`TELEGRAM_BOT_TOKEN=${telegramToken}`);
-    if (telegramOwner) envLines.push(`TELEGRAM_OWNER_ID=${telegramOwner}`);
-    if (githubToken) envLines.push(`GITHUB_TOKEN=${githubToken}`);
-    if (dbUrl) envLines.push(`DATABASE_URL=${dbUrl}`);
-    if (rpcUrl) envLines.push(`RPC_URL=${rpcUrl}`);
-    await writeFile(join(dir, ".env"), envLines.join("\n") + "\n", "utf-8");
+  const envLines: string[] = [];
+  if (state.neynarKey) envLines.push(`NEYNAR_API_KEY=${state.neynarKey}`);
+  if (state.signerUuid) envLines.push(`FARCASTER_SIGNER_UUID=${state.signerUuid}`);
+  if (state.fid) envLines.push(`FARCASTER_FID=${state.fid}`);
+  if (state.telegramToken) envLines.push(`TELEGRAM_BOT_TOKEN=${state.telegramToken}`);
+  if (state.telegramOwner) envLines.push(`TELEGRAM_OWNER_ID=${state.telegramOwner}`);
+  if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
+  if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
+  if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);
+  await writeFile(join(dir, ".env"), envLines.join("\n") + "\n", "utf-8");
 
-    // Create empty memory files
-    await writeFile(join(dir, "workspace", "memory", "posting-log.json"), "[]", "utf-8");
-    await writeFile(join(dir, "workspace", "memory", "post-queue.json"), "[]", "utf-8");
+  await writeFile(join(dir, "workspace", "memory", "posting-log.json"), "[]", "utf-8");
+  await writeFile(join(dir, "workspace", "memory", "post-queue.json"), "[]", "utf-8");
 
-    // Create default HEARTBEAT.md
-    await writeFile(
-      join(dir, "workspace", "HEARTBEAT.md"),
-      `# Heartbeat Checklist
+  await writeFile(
+    join(dir, "workspace", "HEARTBEAT.md"),
+    `# Heartbeat Checklist
 
 - Check if there are queued posts that need to go out
 - Check if there are unanswered mentions
 - Check if any scheduled tasks failed recently
-- Note anything that needs the owner's attention
+- Note anything that needs the founder's attention
 `,
-      "utf-8"
-    );
+    "utf-8"
+  );
 
-    console.log("  Done! Now configure your LLM provider:\n");
+  s.stop("Workspace created");
 
-    // Run LLM setup
-    await runSetup(dir);
+  // --- LLM setup ---
+  await runSetup(dir);
 
-    console.log(`  Setup complete! Run \`freeturtle start\` to launch your operator.\n`);
-  } finally {
-    rl.close();
-  }
+  p.outro("Setup complete! Run `freeturtle start` to launch your CEO.");
 }

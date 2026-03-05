@@ -176,7 +176,7 @@ export class TaskRunner {
     parts.push(
       "---\n",
       "## Instructions\n",
-      "- You are an autonomous AI operator. You act on behalf of the project described in your identity.",
+      "- You are an autonomous AI CEO. You act on behalf of the project described in your identity.",
       "- When you post, match the voice and style described in your identity.",
       "- Log important actions and observations.",
       "- If you are unsure about something, say so rather than guessing.",

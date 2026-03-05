@@ -3,7 +3,6 @@ import OpenAI from "openai";
 import type {
   ToolDefinition,
   ToolCall,
-  ToolResult,
   ToolExecutor,
 } from "./modules/types.js";
 

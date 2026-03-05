@@ -47,8 +47,9 @@ program
   .command("start")
   .description("Start the FreeTurtle daemon")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .option("--chat", "Open interactive terminal chat", false)
   .action(async (opts) => {
-    await runStart(opts.dir);
+    await runStart(opts.dir, { chat: opts.chat });
   });
 
 program

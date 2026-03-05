@@ -13,8 +13,13 @@ import { TelegramChannel } from "./channels/telegram.js";
 import type { Channel } from "./channels/types.js";
 import { createLogger, type Logger } from "./logger.js";
 
+export interface DaemonOptions {
+  chat?: boolean;
+}
+
 export class FreeTurtleDaemon {
   private dir: string;
+  private options: DaemonOptions;
   private logger: Logger;
   private scheduler?: Scheduler;
   private heartbeat?: Heartbeat;
@@ -22,8 +27,9 @@ export class FreeTurtleDaemon {
   private runner?: TaskRunner;
   private ipcServer?: net.Server;
 
-  constructor(dir: string) {
+  constructor(dir: string, options: DaemonOptions = {}) {
     this.dir = dir;
+    this.options = options;
     this.logger = createLogger(dir);
   }
 
@@ -38,19 +44,28 @@ export class FreeTurtleDaemon {
 
     // Create LLM client
     const provider = (config.llm.provider ?? "claude_api") as LLMProvider;
-    const credEnvName =
-      provider.endsWith("subscription")
-        ? config.llm.oauth_token_env
-        : config.llm.api_key_env;
+    const isOAuth = provider.endsWith("subscription");
+    const credEnvName = isOAuth
+      ? config.llm.oauth_token_env
+      : config.llm.api_key_env;
+    const credField = isOAuth ? "oauthToken" : "apiKey";
 
-    const credField = provider.endsWith("subscription")
-      ? "oauthToken"
-      : "apiKey";
+    // Try config-specified env var first, then fall back to well-known names
+    const FALLBACK_ENV: Record<string, string> = {
+      claude_api: "ANTHROPIC_API_KEY",
+      claude_subscription: "ANTHROPIC_AUTH_TOKEN",
+      openai_api: "OPENAI_API_KEY",
+      openai_subscription: "OPENAI_OAUTH_TOKEN",
+      openrouter: "OPENROUTER_API_KEY",
+    };
 
-    const credential = credEnvName ? env[credEnvName] : undefined;
+    const credential =
+      (credEnvName ? env[credEnvName] : undefined) ??
+      env[FALLBACK_ENV[provider]];
+
     if (!credential) {
       throw new Error(
-        `Missing credential: set ${credEnvName ?? "API key"} in .env`
+        `Missing credential: set ${credEnvName ?? FALLBACK_ENV[provider]} in .env`
       );
     }
 
@@ -94,7 +109,7 @@ export class FreeTurtleDaemon {
       return this.runner!.runMessage(text, "channel");
     };
 
-    if (config.channels.terminal?.enabled) {
+    if (this.options.chat) {
       const terminal = new TerminalChannel();
       this.channels.push(terminal);
       await terminal.start(onMessage);
@@ -135,12 +150,20 @@ export class FreeTurtleDaemon {
     });
 
     this.logger.info("FreeTurtle is running");
-    const summary = [
-      `  Modules: ${modules.length}`,
-      `  Cron tasks: ${Object.keys(config.cron).length}`,
-      `  Channels: ${this.channels.map((c) => c.name).join(", ") || "none"}`,
-    ];
-    console.log(`\n  FreeTurtle is running\n${summary.join("\n")}\n`);
+
+    const channelNames = this.channels.map((c) => c.name).join(", ") || "none";
+    console.log(`
+  FreeTurtle is running (PID ${process.pid})
+
+  Modules:    ${modules.map((m) => m.name).join(", ") || "none"}
+  Cron tasks: ${Object.keys(config.cron).length}
+  Channels:   ${channelNames}
+
+  Send messages:  freeturtle send "your message"
+  Check status:   freeturtle status
+  Interactive:    freeturtle start --chat
+  Stop:           Ctrl+C
+`);
   }
 
   async stop(): Promise<void> {
