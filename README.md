@@ -197,6 +197,18 @@ freeturtle setup             # Reconfigure LLM provider
 freeturtle connect farcaster # Set up Farcaster signer
 ```
 
+## Hosting
+
+We recommend [Oracle Cloud's free ARM instance](docs/oracle-cloud-setup.md) — 4 CPUs, 24 GB RAM, always free. The setup guide walks through account creation, instance setup, networking, and installing FreeTurtle as a system service.
+
+```bash
+# On your server
+pnpm install -g freeturtle
+freeturtle init
+freeturtle start
+freeturtle install-service  # auto-restart on reboot
+```
+
 ## Before You Begin
 
 **Create a separate account for your operator.** Start with a Google account, then use it to sign up for:
