@@ -133,6 +133,21 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(enable)) return false;
       state.farcaster = enable;
       if (enable) {
+        p.note(
+          [
+            "You need three things from Neynar + Warpcast:",
+            "",
+            "1. API key — sign up at dev.neynar.com (free tier: 200K compute units/month)",
+            "2. Signer UUID — create one with:",
+            '   curl -X POST https://api.neynar.com/v2/farcaster/signer \\',
+            '     -H "x-api-key: YOUR_API_KEY"',
+            "   Then open the signer_approval_url and approve in Warpcast.",
+            "   Reuse this signer — each new one costs an onchain transaction.",
+            "3. FID — open Warpcast → your profile → three dots → About",
+          ].join("\n"),
+          "Farcaster setup"
+        );
+
         const key = await p.text({ message: "  Neynar API key", validate: (v) => (v?.trim() ? undefined : "Required") });
         if (p.isCancel(key)) { state.farcaster = false; return true; }
         state.neynarKey = key;
@@ -156,6 +171,18 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(enable)) return false;
       state.telegram = enable;
       if (enable) {
+        p.note(
+          [
+            "1. Message @BotFather on Telegram → /newbot",
+            "   Choose a name and username (must end in 'bot')",
+            "   BotFather replies with your bot token",
+            "",
+            "2. To get your user ID, message @userinfobot on Telegram",
+            "   It replies immediately with your numeric ID",
+          ].join("\n"),
+          "Telegram setup"
+        );
+
         const token = await p.text({ message: "  Bot token", validate: (v) => (v?.trim() ? undefined : "Required") });
         if (p.isCancel(token)) { state.telegram = false; return true; }
         state.telegramToken = token;
@@ -175,6 +202,17 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(enable)) return false;
       state.github = enable;
       if (enable) {
+        p.note(
+          [
+            "1. Go to github.com/settings/tokens",
+            "2. Generate new token → Fine-grained token",
+            "3. Select the repos your operator should access",
+            "4. Grant permissions: Issues (read/write), Contents (read/write)",
+            "5. Copy the token — you won't see it again",
+          ].join("\n"),
+          "GitHub setup"
+        );
+
         const token = await p.text({ message: "  GitHub personal access token", validate: (v) => (v?.trim() ? undefined : "Required") });
         if (p.isCancel(token)) { state.github = false; return true; }
         state.githubToken = token;
@@ -190,6 +228,17 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(enable)) return false;
       state.database = enable;
       if (enable) {
+        p.note(
+          [
+            "Provide a Postgres connection string. The operator can only",
+            "run read-only queries — all writes are blocked.",
+            "",
+            "Supabase: Settings → Database → Connection string (URI)",
+            "Local:    postgresql://localhost/your_db",
+          ].join("\n"),
+          "Database setup"
+        );
+
         const url = await p.text({
           message: "  Database connection URL",
           placeholder: "postgres://user:pass@host:5432/dbname",
@@ -209,6 +258,18 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(enable)) return false;
       state.onchain = enable;
       if (enable) {
+        p.note(
+          [
+            "Provide a Base mainnet RPC URL. Read-only — no wallet or signing.",
+            "",
+            "Free options:",
+            "  Public:  https://mainnet.base.org",
+            "  Alchemy: sign up at alchemy.com for higher rate limits",
+            "  Infura:  sign up at infura.io",
+          ].join("\n"),
+          "Onchain setup"
+        );
+
         const url = await p.text({
           message: "  Base RPC URL",
           placeholder: "https://mainnet.base.org",

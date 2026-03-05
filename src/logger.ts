@@ -36,12 +36,11 @@ export function createLogger(dir?: string): Logger {
 
     const line = formatLine(level, msg);
 
+    // Only print errors/warnings to stderr; all else goes to log file only
     if (level === "error") {
       console.error(line);
     } else if (level === "warn") {
       console.warn(line);
-    } else {
-      console.log(line);
     }
 
     writeToFile(line).catch(() => {

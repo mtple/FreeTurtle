@@ -181,11 +181,12 @@ export class LLMClient {
     tools: ToolDefinition[],
     toolExecutor: ToolExecutor
   ): Promise<string> {
+    const MAX_ITERATIONS = 25;
     const messages: Anthropic.MessageParam[] = [
       { role: "user", content: userPrompt },
     ];
 
-    for (;;) {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await this.chatAnthropic(systemPrompt, messages, tools);
 
       if (response.tool_calls.length === 0) {
@@ -219,6 +220,10 @@ export class LLMClient {
       }
       messages.push({ role: "user", content: toolResults });
     }
+
+    // If we hit the limit, return whatever text we have
+    const last = await this.chatAnthropic(systemPrompt, messages, []);
+    return last.text || "(Agent reached maximum tool call iterations)";
   }
 
   // --- OpenAI implementation ---
@@ -274,11 +279,12 @@ export class LLMClient {
     tools: ToolDefinition[],
     toolExecutor: ToolExecutor
   ): Promise<string> {
+    const MAX_ITERATIONS = 25;
     const messages: OpenAI.ChatCompletionMessageParam[] = [
       { role: "user", content: userPrompt },
     ];
 
-    for (;;) {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await this.chatOpenAI(systemPrompt, messages, tools);
 
       if (response.tool_calls.length === 0) {
@@ -310,5 +316,9 @@ export class LLMClient {
         });
       }
     }
+
+    // If we hit the limit, return whatever text we have
+    const last = await this.chatOpenAI(systemPrompt, messages, []);
+    return last.text || "(Agent reached maximum tool call iterations)";
   }
 }

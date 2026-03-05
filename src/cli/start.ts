@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { FreeTurtleDaemon } from "../daemon.js";
 
@@ -17,7 +17,8 @@ export async function runStart(
       );
       process.exit(1);
     } catch {
-      // Stale PID file
+      // Stale PID file — clean it up
+      await unlink(pidPath).catch(() => {});
     }
   } catch {
     // No PID file

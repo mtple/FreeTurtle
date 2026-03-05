@@ -78,7 +78,7 @@ export class FreeTurtleDaemon {
     this.logger.info(`LLM: ${provider} / ${config.llm.model}`);
 
     // Load modules
-    const modules = await loadModules(config, env);
+    const modules = await loadModules(config, env, this.logger);
     this.logger.info(
       `Modules: ${modules.map((m) => m.name).join(", ") || "none"}`
     );
@@ -231,8 +231,14 @@ export class FreeTurtleDaemon {
     if (command.startsWith("send ")) {
       const message = command.slice(5);
       if (!this.runner) return "Error: runner not initialized";
-      const response = await this.runner.runMessage(message, "ipc");
-      return response;
+      try {
+        const response = await this.runner.runMessage(message, "ipc");
+        return response;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        this.logger.error(`IPC send failed: ${msg}`);
+        return `Error: ${msg}`;
+      }
     }
 
     if (command === "stop") {

@@ -30,10 +30,12 @@ export class TelegramChannel implements Channel {
     });
 
     this.bot.catch((err) => {
-      console.error(`[telegram] Error: ${err.message}`);
+      console.error(`[telegram] ${err.message}`);
     });
 
-    this.bot.start();
+    this.bot.start().catch((err) => {
+      console.error(`[telegram] Failed to start: ${err.message}`);
+    });
   }
 
   async send(text: string): Promise<void> {
