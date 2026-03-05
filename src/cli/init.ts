@@ -1,8 +1,12 @@
 import * as p from "@clack/prompts";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
 import { runSetup } from "../setup.js";
+import { LLMClient } from "../llm.js";
 import { connectFarcaster } from "./connect-farcaster.js";
+import { scanForSecrets, redactSecrets, condenseDocs } from "./intake.js";
+import { testTelegram, testGitHub, testDatabase, testOnchain } from "./connection-tests.js";
 
 const TURTLE = `
         \x1b[38;2;94;255;164m_____\x1b[0m     \x1b[38;2;94;255;164m____\x1b[0m
@@ -53,12 +57,91 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Collect multiline text from stdin using readline.
+ * Ends when the user enters two consecutive blank lines or presses Ctrl+D.
+ */
+function readMultiline(): Promise<string> {
+  return new Promise((resolve) => {
+    const lines: string[] = [];
+    let consecutiveBlanks = 0;
+    const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: "" });
+    rl.prompt();
+    rl.on("line", (line) => {
+      if (line.trim() === "") {
+        consecutiveBlanks++;
+        if (consecutiveBlanks >= 2) {
+          rl.close();
+          return;
+        }
+      } else {
+        for (let i = 0; i < consecutiveBlanks; i++) lines.push("");
+        consecutiveBlanks = 0;
+        lines.push(line);
+      }
+    });
+    rl.on("close", () => resolve(lines.join("\n").trim()));
+  });
+}
+
+/**
+ * Detect paste: if a p.text answer is longer than this, it was probably a paste.
+ * Inspired by OpenClaw's burst coalescer — instead of draining stdin (which
+ * interferes with clack), we detect paste from the submitted value itself and
+ * capture it as business context.
+ */
+const PASTE_THRESHOLD = 200;
+
+/**
+ * Wrapper around p.text that detects accidental paste (answer > PASTE_THRESHOLD chars).
+ * When paste is detected:
+ *   1. Captures the pasted text as business context on state
+ *   2. Drains remaining pasted lines from stdin via readMultiline()
+ *   3. Re-asks the original question
+ * Returns null on cancel.
+ */
+async function pasteAwareText(
+  state: { businessContext: string },
+  opts: Parameters<typeof p.text>[0]
+): Promise<string | null> {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const result = await p.text(opts);
+    if (p.isCancel(result)) return null;
+
+    if (result.length > PASTE_THRESHOLD && !state.businessContext) {
+      // Looks like a paste burst — capture the first line and drain the rest
+      p.log.info("Looks like you pasted docs — collecting the rest...");
+      const overflow = await readMultiline();
+      state.businessContext = overflow ? result + "\n" + overflow : result;
+      p.log.success(`Saved ${(state.businessContext.length / 1000).toFixed(0)}K chars as business context.`);
+      // Re-ask the original question
+      continue;
+    }
+
+    return result;
+  }
+}
+
 async function hatchAnimation(): Promise<void> {
   for (const frame of HATCH_FRAMES) {
     process.stdout.write(`\r${frame}   `);
     await sleep(400);
   }
   process.stdout.write("\r              \r");
+}
+
+async function runConnectionTest(name: string, test: () => Promise<void>): Promise<void> {
+  const s = p.spinner();
+  s.start(`Testing ${name} connection`);
+  try {
+    await test();
+    s.stop(`${name} connected!`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    s.stop(`${name} test failed: ${msg}`);
+    p.log.warn("You can fix this later in ~/.freeturtle/.env");
+  }
 }
 
 export async function runInit(dir: string): Promise<void> {
@@ -112,6 +195,7 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: string;
     onchain: boolean;
     rpcUrl: string;
+    businessContext: string;
     contracts: { name: string; address: string }[];
   }
 
@@ -121,6 +205,7 @@ export async function runInit(dir: string): Promise<void> {
     ceoName: "",
     voice: "casual",
     founderName: "",
+    businessContext: "",
     farcaster: false,
     neynarKey: "",
     signerUuid: "",
@@ -140,40 +225,81 @@ export async function runInit(dir: string): Promise<void> {
   const steps: (() => Promise<boolean>)[] = [
     // 1. Project name
     async () => {
-      const result = await p.text({
+      const result = await pasteAwareText(state, {
         message: "What project will this AI CEO be running?",
         placeholder: "e.g. Tortoise, Acme Corp, My Newsletter",
         defaultValue: state.projectName || undefined,
         validate: (v) => (v?.trim() ? undefined : "Required"),
       });
-      if (p.isCancel(result)) return false;
+      if (result === null) return false;
       state.projectName = result;
       return true;
     },
     // 2. Description
     async () => {
-      const result = await p.text({
+      const result = await pasteAwareText(state, {
         message: "Describe the project in a sentence or two.",
         placeholder: "A music platform on Farcaster/Base for independent artists",
         defaultValue: state.description || undefined,
       });
-      if (p.isCancel(result)) return false;
+      if (result === null) return false;
       state.description = result;
       return true;
     },
-    // 3. CEO name
+    // 3. Business context (optional, multiline-safe)
     async () => {
-      const result = await p.text({
+      // Skip if we already captured context from a paste burst
+      if (state.businessContext) {
+        p.log.info(`Using ${(state.businessContext.length / 1000).toFixed(0)}K chars of business context you pasted earlier.`);
+        return true;
+      }
+
+      const wantContext = await p.confirm({
+        message: "Want to dump docs about your business? (pitch deck, readme, strategy notes, etc.)",
+        initialValue: false,
+      });
+      if (p.isCancel(wantContext)) return false;
+      if (!wantContext) return true;
+
+      p.log.info("Paste or type below. Two blank lines to finish.");
+
+      let text = await readMultiline();
+
+      if (text) {
+        // Secret scan
+        const secrets = scanForSecrets(text);
+        if (secrets.length > 0) {
+          p.log.warn("Detected possible secrets in your text:");
+          for (const s of secrets) {
+            p.log.warn(`  ${s}`);
+          }
+          const redact = await p.confirm({
+            message: "Redact detected secrets?",
+            initialValue: true,
+          });
+          if (!p.isCancel(redact) && redact) {
+            text = redactSecrets(text);
+            p.log.success("Secrets redacted.");
+          }
+        }
+        state.businessContext = text;
+        p.log.info(`Got it — ${(text.length / 1000).toFixed(0)}K chars of context.`);
+      }
+      return true;
+    },
+    // 4. CEO name
+    async () => {
+      const result = await pasteAwareText(state, {
         message: "What should your AI CEO be called?",
         placeholder: "e.g. Shelly, Atlas, Nova",
         defaultValue: state.ceoName || undefined,
         validate: (v) => (v?.trim() ? undefined : "Required"),
       });
-      if (p.isCancel(result)) return false;
+      if (result === null) return false;
       state.ceoName = result;
       return true;
     },
-    // 4. Voice
+    // 5. Voice
     async () => {
       const result = await p.select({
         message: "How should your CEO communicate?",
@@ -188,18 +314,18 @@ export async function runInit(dir: string): Promise<void> {
       state.voice = result as string;
       return true;
     },
-    // 5. Founder name
+    // 6. Founder name
     async () => {
-      const result = await p.text({
+      const result = await pasteAwareText(state, {
         message: "Your name (the founder).",
         defaultValue: state.founderName || undefined,
         validate: (v) => (v?.trim() ? undefined : "Required"),
       });
-      if (p.isCancel(result)) return false;
+      if (result === null) return false;
       state.founderName = result;
       return true;
     },
-    // 6. Farcaster
+    // 7. Farcaster
     async () => {
       const enable = await p.confirm({
         message: "Connect Farcaster? (post and read casts via Neynar)",
@@ -219,7 +345,7 @@ export async function runInit(dir: string): Promise<void> {
       }
       return true;
     },
-    // 7. Telegram
+    // 8. Telegram
     async () => {
       const enable = await p.confirm({
         message: "Connect Telegram? (chat with your CEO via bot)",
@@ -244,13 +370,16 @@ export async function runInit(dir: string): Promise<void> {
         if (p.isCancel(token)) { state.telegram = false; return true; }
         state.telegramToken = token;
 
+        // Test the token
+        await runConnectionTest("Telegram", () => testTelegram(state.telegramToken));
+
         const owner = await promptWithExisting({ message: "Your Telegram user ID (numeric, from @userinfobot)", existing: existingEnv.TELEGRAM_OWNER_ID });
         if (p.isCancel(owner)) { state.telegram = false; return true; }
         state.telegramOwner = owner;
       }
       return true;
     },
-    // 8. GitHub
+    // 9. GitHub
     async () => {
       const enable = await p.confirm({
         message: "Connect GitHub? (issues and file commits)",
@@ -273,10 +402,13 @@ export async function runInit(dir: string): Promise<void> {
         const token = await promptWithExisting({ message: "GitHub personal access token", existing: existingEnv.GITHUB_TOKEN, mask: true });
         if (p.isCancel(token)) { state.github = false; return true; }
         state.githubToken = token;
+
+        // Test the token
+        await runConnectionTest("GitHub", () => testGitHub(state.githubToken));
       }
       return true;
     },
-    // 9. Database
+    // 10. Database
     async () => {
       const enable = await p.confirm({
         message: "Connect a database? (read-only Postgres queries)",
@@ -299,10 +431,13 @@ export async function runInit(dir: string): Promise<void> {
         const url = await promptWithExisting({ message: "Database connection URL", existing: existingEnv.DATABASE_URL, placeholder: "postgres://user:pass@host:5432/dbname", mask: true });
         if (p.isCancel(url)) { state.database = false; return true; }
         state.dbUrl = url;
+
+        // Test the connection
+        await runConnectionTest("Database", () => testDatabase(state.dbUrl));
       }
       return true;
     },
-    // 10. Onchain
+    // 11. Onchain
     async () => {
       const enable = await p.confirm({
         message: "Connect onchain? (read contracts and balances on Base)",
@@ -327,6 +462,9 @@ export async function runInit(dir: string): Promise<void> {
         const url = await promptWithExisting({ message: "Base RPC URL", existing: existingEnv.RPC_URL, placeholder: "https://mainnet.base.org" });
         if (p.isCancel(url)) { state.onchain = false; return true; }
         state.rpcUrl = url;
+
+        // Test the RPC
+        await runConnectionTest("RPC", () => testOnchain(state.rpcUrl));
 
         // Collect smart contracts
         const addContracts = await p.confirm({
@@ -390,6 +528,84 @@ export async function runInit(dir: string): Promise<void> {
     }
   }
 
+  // --- LLM setup ---
+  p.log.step("Let's pick a brain for your CEO.");
+  const setupResult = await runSetup(dir);
+
+  // --- Condense business context into soul if provided ---
+  let soulContent: string | undefined;
+  if (state.businessContext) {
+    const llm = new LLMClient({
+      provider: setupResult.provider,
+      model: setupResult.model,
+      apiKey: setupResult.apiKey,
+      oauthToken: setupResult.oauthToken,
+    });
+
+    const s = p.spinner();
+    s.start(`Distilling your context into ${state.ceoName}'s soul`);
+    try {
+      soulContent = await condenseDocs(
+        state.businessContext,
+        {
+          ceoName: state.ceoName,
+          projectName: state.projectName,
+          description: state.description,
+          founderName: state.founderName,
+          voice: state.voice,
+        },
+        llm,
+        state.contracts
+      );
+      s.stop("Soul distilled from your business context!");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      s.stop(`Condensation failed: ${msg}`);
+      p.log.warn("Falling back to the standard template.");
+      soulContent = undefined;
+    }
+
+    // Show and confirm
+    if (soulContent) {
+      p.note(soulContent, `${state.ceoName}'s soul`);
+      const accept = await p.select({
+        message: "How does this look?",
+        options: [
+          { value: "accept", label: "Looks good" },
+          { value: "retry", label: "Try again" },
+          { value: "template", label: "Use the standard template instead" },
+        ],
+      });
+      if (p.isCancel(accept)) {
+        // Use what we have
+      } else if (accept === "retry") {
+        const s2 = p.spinner();
+        s2.start("Regenerating...");
+        try {
+          soulContent = await condenseDocs(
+            state.businessContext,
+            {
+              ceoName: state.ceoName,
+              projectName: state.projectName,
+              description: state.description,
+              founderName: state.founderName,
+              voice: state.voice,
+            },
+            llm,
+            state.contracts
+          );
+          s2.stop("Done!");
+          p.note(soulContent, `${state.ceoName}'s soul (v2)`);
+        } catch {
+          s2.stop("Failed again, using standard template.");
+          soulContent = undefined;
+        }
+      } else if (accept === "template") {
+        soulContent = undefined;
+      }
+    }
+  }
+
   // --- Generate workspace with playful tasks ---
 
   const modules = [
@@ -413,18 +629,23 @@ export async function runInit(dir: string): Promise<void> {
     {
       title: `Teaching ${state.ceoName} to speak`,
       task: async () => {
-        const VOICE: Record<string, string> = {
-          casual:
-            "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
-          professional:
-            "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
-          minimalist:
-            "- Brief and direct\n- Says more with less\n- No fluff, no filler",
-        };
+        if (soulContent) {
+          // Use the LLM-condensed soul
+          await writeFile(join(dir, "soul.md"), soulContent + "\n", "utf-8");
+        } else {
+          // Standard template
+          const VOICE: Record<string, string> = {
+            casual:
+              "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
+            professional:
+              "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
+            minimalist:
+              "- Brief and direct\n- Says more with less\n- No fluff, no filler",
+          };
 
-        await writeFile(
-          join(dir, "soul.md"),
-          `# ${state.ceoName}
+          await writeFile(
+            join(dir, "soul.md"),
+            `# ${state.ceoName}
 
 ## Identity
 ${state.ceoName} is the AI CEO for ${state.projectName}.
@@ -449,8 +670,9 @@ ${state.contracts.length > 0 ? `\n### Smart Contracts (Base)\n${state.contracts.
 ## Founder
 ${state.founderName}.
 `,
-          "utf-8"
-        );
+            "utf-8"
+          );
+        }
         await sleep(200);
         return "Soul written";
       },
@@ -555,10 +777,6 @@ ${state.founderName}.
   if (modules.length > 0) {
     p.log.info(`Connected: ${modules.join(", ")}`);
   }
-
-  // --- LLM setup ---
-  p.log.step("One last thing \u2014 let's pick a brain for your CEO.");
-  await runSetup(dir);
 
   console.log(`
   ${state.ceoName} is ready. 🐢

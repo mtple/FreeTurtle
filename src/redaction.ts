@@ -1,5 +1,5 @@
 // List of keys that should be redacted in nested objects
-const SENSITIVE_KEYS = [
+export const SENSITIVE_KEYS = [
   "password",
   "token",
   "secret",
@@ -12,7 +12,7 @@ const SENSITIVE_KEYS = [
 ];
 
 // Mask patterns in strings (API keys, tokens, etc)
-const SENSITIVE_PATTERNS = [
+export const SENSITIVE_PATTERNS = [
   /sk-[a-zA-Z0-9]{20,}/g, // Anthropic/OpenAI keys
   /ghp_[a-zA-Z0-9]{36}/g, // GitHub tokens
   /neynar-[a-zA-Z0-9]+/g, // Neynar keys

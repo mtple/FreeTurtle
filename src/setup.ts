@@ -3,6 +3,13 @@ import { chmod, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { LLMProvider } from "./llm.js";
 
+export interface SetupResult {
+  provider: LLMProvider;
+  model: string;
+  apiKey?: string;
+  oauthToken?: string;
+}
+
 interface ProviderInfo {
   label: string;
   hint: string;
@@ -69,7 +76,7 @@ const PROVIDER_ORDER: LLMProvider[] = [
   "openrouter",
 ];
 
-export async function runSetup(dir: string): Promise<void> {
+export async function runSetup(dir: string): Promise<SetupResult> {
   const providerKey = (await p.select({
     message: "Pick a brain for your CEO",
     options: PROVIDER_ORDER.map((key) => ({
@@ -141,6 +148,14 @@ export async function runSetup(dir: string): Promise<void> {
   }
 
   p.log.success(`Brain connected! Using ${info.label} / ${finalModel}`);
+
+  const result: SetupResult = { provider: providerKey, model: finalModel };
+  if (info.credField === "apiKey") {
+    result.apiKey = credential.trim();
+  } else {
+    result.oauthToken = credential.trim();
+  }
+  return result;
 }
 
 function updateConfigLlm(
