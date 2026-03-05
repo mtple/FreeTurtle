@@ -32,7 +32,11 @@ program
   .command("hello")
   .description("Verify the CLI is working")
   .action(() => {
-    console.log("FreeTurtle v0.1");
+    console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
+    console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1");
+    console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
+    console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
 
 program

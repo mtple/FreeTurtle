@@ -161,18 +161,27 @@ export class FreeTurtleDaemon {
 
     this.logger.info("FreeTurtle is running");
 
+    const moduleNames = modules.map((m) => m.name).join(", ") || "none";
     const channelNames = this.channels.map((c) => c.name).join(", ") || "none";
+    const cronCount = Object.keys(config.cron).length;
+
     console.log(`
-  FreeTurtle is running (PID ${process.pid})
+    \x1b[38;2;94;255;164m  _____     ____\x1b[0m
+    \x1b[38;2;94;255;164m /      \\  |  o |\x1b[0m
+    \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m
+    \x1b[38;2;94;255;164m|_________/\x1b[0m
+    \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m
 
-  Modules:    ${modules.map((m) => m.name).join(", ") || "none"}
-  Cron tasks: ${Object.keys(config.cron).length}
-  Channels:   ${channelNames}
+  \x1b[1mPID ${process.pid}\x1b[0m — swimming along
 
-  Send messages:  freeturtle send "your message"
-  Check status:   freeturtle status
-  Interactive:    freeturtle start --chat
-  Stop:           Ctrl+C
+  Modules     ${moduleNames}
+  Cron tasks  ${cronCount}
+  Channels    ${channelNames}
+
+  \x1b[2mfreeturtle send "message"  — talk to your CEO\x1b[0m
+  \x1b[2mfreeturtle start --chat   — interactive mode\x1b[0m
+  \x1b[2mfreeturtle status         — check on things\x1b[0m
+  \x1b[2mCtrl+C                    — stop\x1b[0m
 `);
   }
 

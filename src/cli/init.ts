@@ -4,6 +4,24 @@ import { join } from "node:path";
 import { runSetup } from "../setup.js";
 import { connectFarcaster } from "./connect-farcaster.js";
 
+const TURTLE = `
+        \x1b[38;2;94;255;164m_____\x1b[0m     \x1b[38;2;94;255;164m____\x1b[0m
+       \x1b[38;2;94;255;164m/      \\\x1b[0m  \x1b[38;2;94;255;164m|  o |\x1b[0m
+      \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m
+      \x1b[38;2;94;255;164m|_________/\x1b[0m
+      \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m
+
+      \x1b[1mFreeTurtle\x1b[0m  \x1b[2mv0.1\x1b[0m
+`;
+
+const HATCH_FRAMES = [
+  "  🥚",
+  "  🥚  .",
+  "  🥚  . .",
+  "  🥚💥",
+  "  🐢 !!",
+];
+
 /** Prompt for a value, offering to reuse an existing one from .env */
 async function promptWithExisting(opts: {
   message: string;
@@ -31,7 +49,22 @@ async function promptWithExisting(opts: {
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function hatchAnimation(): Promise<void> {
+  for (const frame of HATCH_FRAMES) {
+    process.stdout.write(`\r${frame}   `);
+    await sleep(400);
+  }
+  process.stdout.write("\r              \r");
+}
+
 export async function runInit(dir: string): Promise<void> {
+  console.log(TURTLE);
+  await hatchAnimation();
+
   p.intro("FreeTurtle");
 
   // Load existing .env values
@@ -48,14 +81,14 @@ export async function runInit(dir: string): Promise<void> {
 
   p.note(
     [
-      "You're about to create an AI CEO — an autonomous agent that",
-      "posts content, chats with you, writes strategy, and runs",
-      "operations for your project.",
+      "Let's hatch your AI CEO — an autonomous agent that",
+      "posts content, chats with you, writes strategy, and",
+      "runs operations for your project.",
       "",
-      "You can always re-run init or edit the files directly",
-      "in ~/.freeturtle/ to change settings.",
+      "It'll only take a few minutes. You can always change",
+      "settings later in ~/.freeturtle/",
     ].join("\n"),
-    "Welcome"
+    "🥚 Welcome"
   );
 
   // --- Step-based flow with back support ---
@@ -197,7 +230,7 @@ export async function runInit(dir: string): Promise<void> {
       if (enable) {
         p.note(
           [
-            "1. Message @BotFather on Telegram → /newbot",
+            "1. Message @BotFather on Telegram \u2192 /newbot",
             "   Choose a name and username (must end in 'bot')",
             "   BotFather replies with your bot token",
             "",
@@ -229,10 +262,10 @@ export async function runInit(dir: string): Promise<void> {
         p.note(
           [
             "1. Go to github.com/settings/tokens",
-            "2. Generate new token → Fine-grained token",
+            "2. Generate new token \u2192 Fine-grained token",
             "3. Select the repos your CEO should access",
             "4. Grant permissions: Issues (read/write), Contents (read/write)",
-            "5. Copy the token — you won't see it again",
+            "5. Copy the token \u2014 you won't see it again",
           ].join("\n"),
           "GitHub setup"
         );
@@ -255,9 +288,9 @@ export async function runInit(dir: string): Promise<void> {
         p.note(
           [
             "Provide a Postgres connection string. The CEO can only",
-            "run read-only queries — all writes are blocked.",
+            "run read-only queries \u2014 all writes are blocked.",
             "",
-            "Supabase: Settings → Database → Connection string (URI)",
+            "Supabase: Settings \u2192 Database \u2192 Connection string (URI)",
             "Local:    postgresql://localhost/your_db",
           ].join("\n"),
           "Database setup"
@@ -280,7 +313,7 @@ export async function runInit(dir: string): Promise<void> {
       if (enable) {
         p.note(
           [
-            "Provide a Base mainnet RPC URL. Read-only — no wallet or signing.",
+            "Provide a Base mainnet RPC URL. Read-only \u2014 no wallet or signing.",
             "",
             "Free options:",
             "  Public:   https://mainnet.base.org",
@@ -357,26 +390,41 @@ export async function runInit(dir: string): Promise<void> {
     }
   }
 
-  // --- Generate workspace ---
+  // --- Generate workspace with playful tasks ---
 
-  const s = p.spinner();
-  s.start("Creating workspace");
+  const modules = [
+    state.farcaster && "Farcaster",
+    state.telegram && "Telegram",
+    state.github && "GitHub",
+    state.database && "Database",
+    state.onchain && "Onchain",
+  ].filter(Boolean);
 
-  await mkdir(join(dir, "workspace", "memory", "session-notes"), { recursive: true });
-  await mkdir(join(dir, "strategy"), { recursive: true });
+  await p.tasks([
+    {
+      title: `Building ${state.ceoName}'s nest`,
+      task: async () => {
+        await mkdir(join(dir, "workspace", "memory", "session-notes"), { recursive: true });
+        await mkdir(join(dir, "strategy"), { recursive: true });
+        await sleep(300);
+        return "Directories created";
+      },
+    },
+    {
+      title: `Teaching ${state.ceoName} to speak`,
+      task: async () => {
+        const VOICE: Record<string, string> = {
+          casual:
+            "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
+          professional:
+            "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
+          minimalist:
+            "- Brief and direct\n- Says more with less\n- No fluff, no filler",
+        };
 
-  const VOICE: Record<string, string> = {
-    casual:
-      "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
-    professional:
-      "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
-    minimalist:
-      "- Brief and direct\n- Says more with less\n- No fluff, no filler",
-  };
-
-  await writeFile(
-    join(dir, "soul.md"),
-    `# ${state.ceoName}
+        await writeFile(
+          join(dir, "soul.md"),
+          `# ${state.ceoName}
 
 ## Identity
 ${state.ceoName} is the AI CEO for ${state.projectName}.
@@ -401,90 +449,127 @@ ${state.contracts.length > 0 ? `\n### Smart Contracts (Base)\n${state.contracts.
 ## Founder
 ${state.founderName}.
 `,
-    "utf-8"
-  );
-
-  const configLines = [
-    "# FreeTurtle Config\n",
-    "## LLM",
-    "- provider: claude_api",
-    "- model: claude-sonnet-4-5-20250514",
-    "- max_tokens: 4096",
-    "- api_key_env: ANTHROPIC_API_KEY",
-    "",
-    "## Cron",
-    "### post",
-    "- schedule: 0 */8 * * *",
-    "- prompt: Check for any queued posts. If there's a new upload worth sharing, share it. Otherwise write an original post.",
-    "",
-    "### strategy",
-    "- schedule: 0 4 * * 0",
-    "- prompt: Analyze posting history, engagement, platform data. Write a strategy brief.",
-    "- output: strategy/{{date}}.md",
-    "",
-    "## Channels",
-    "### terminal",
-    "- enabled: true",
-    "",
-    "### telegram",
-    `- enabled: ${state.telegram}`,
-    "",
-    "## Modules",
-    "### farcaster",
-    `- enabled: ${state.farcaster}`,
-    "",
-    "### database",
-    `- enabled: ${state.database}`,
-    "",
-    "### github",
-    `- enabled: ${state.github}`,
-    "",
-    "### onchain",
-    `- enabled: ${state.onchain}`,
-    "",
-    "## Policy",
-    "### github",
-    "- approval_required_branches: main",
-    "",
-    "### approvals",
-    "- timeout_seconds: 300",
-    "- fail_mode: deny",
-    "",
-  ];
-  await writeFile(join(dir, "config.md"), configLines.join("\n"), "utf-8");
-
-  const envLines: string[] = [];
-  if (state.neynarKey) envLines.push(`NEYNAR_API_KEY=${state.neynarKey}`);
-  if (state.signerUuid) envLines.push(`FARCASTER_SIGNER_UUID=${state.signerUuid}`);
-  if (state.fid) envLines.push(`FARCASTER_FID=${state.fid}`);
-  if (state.telegramToken) envLines.push(`TELEGRAM_BOT_TOKEN=${state.telegramToken}`);
-  if (state.telegramOwner) envLines.push(`TELEGRAM_OWNER_ID=${state.telegramOwner}`);
-  if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
-  if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
-  if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);
-  const envFilePath = join(dir, ".env");
-  await writeFile(envFilePath, envLines.join("\n") + "\n", "utf-8");
-  await chmod(envFilePath, 0o600);
-
-  await writeFile(join(dir, "workspace", "memory", "posting-log.json"), "[]", "utf-8");
-  await writeFile(join(dir, "workspace", "memory", "post-queue.json"), "[]", "utf-8");
-
-  await writeFile(
-    join(dir, "workspace", "HEARTBEAT.md"),
-    `# Heartbeat Checklist
+          "utf-8"
+        );
+        await sleep(200);
+        return "Soul written";
+      },
+    },
+    {
+      title: "Configuring the shell",
+      task: async () => {
+        const configLines = [
+          "# FreeTurtle Config\n",
+          "## LLM",
+          "- provider: claude_api",
+          "- model: claude-sonnet-4-5-20250514",
+          "- max_tokens: 4096",
+          "- api_key_env: ANTHROPIC_API_KEY",
+          "",
+          "## Cron",
+          "### post",
+          "- schedule: 0 */8 * * *",
+          "- prompt: Check for any queued posts. If there's a new upload worth sharing, share it. Otherwise write an original post.",
+          "",
+          "### strategy",
+          "- schedule: 0 4 * * 0",
+          "- prompt: Analyze posting history, engagement, platform data. Write a strategy brief.",
+          "- output: strategy/{{date}}.md",
+          "",
+          "## Channels",
+          "### terminal",
+          "- enabled: true",
+          "",
+          "### telegram",
+          `- enabled: ${state.telegram}`,
+          "",
+          "## Modules",
+          "### farcaster",
+          `- enabled: ${state.farcaster}`,
+          "",
+          "### database",
+          `- enabled: ${state.database}`,
+          "",
+          "### github",
+          `- enabled: ${state.github}`,
+          "",
+          "### onchain",
+          `- enabled: ${state.onchain}`,
+          "",
+          "## Policy",
+          "### github",
+          "- approval_required_branches: main",
+          "",
+          "### approvals",
+          "- timeout_seconds: 300",
+          "- fail_mode: deny",
+          "",
+        ];
+        await writeFile(join(dir, "config.md"), configLines.join("\n"), "utf-8");
+        await sleep(200);
+        return "Config saved";
+      },
+    },
+    {
+      title: "Locking up the secrets",
+      task: async () => {
+        const envLines: string[] = [];
+        if (state.neynarKey) envLines.push(`NEYNAR_API_KEY=${state.neynarKey}`);
+        if (state.signerUuid) envLines.push(`FARCASTER_SIGNER_UUID=${state.signerUuid}`);
+        if (state.fid) envLines.push(`FARCASTER_FID=${state.fid}`);
+        if (state.telegramToken) envLines.push(`TELEGRAM_BOT_TOKEN=${state.telegramToken}`);
+        if (state.telegramOwner) envLines.push(`TELEGRAM_OWNER_ID=${state.telegramOwner}`);
+        if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
+        if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
+        if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);
+        const envFilePath = join(dir, ".env");
+        await writeFile(envFilePath, envLines.join("\n") + "\n", "utf-8");
+        await chmod(envFilePath, 0o600);
+        await sleep(150);
+        return ".env secured (chmod 600)";
+      },
+    },
+    {
+      title: "Preparing memory banks",
+      task: async () => {
+        await writeFile(join(dir, "workspace", "memory", "posting-log.json"), "[]", "utf-8");
+        await writeFile(join(dir, "workspace", "memory", "post-queue.json"), "[]", "utf-8");
+        await writeFile(
+          join(dir, "workspace", "HEARTBEAT.md"),
+          `# Heartbeat Checklist
 
 - Check if there are queued posts that need to go out
 - Check if there are unanswered mentions
 - Check if any scheduled tasks failed recently
 - Note anything that needs the founder's attention
 `,
-    "utf-8"
-  );
+          "utf-8"
+        );
+        await sleep(150);
+        return "Memory initialized";
+      },
+    },
+  ]);
 
-  s.stop("Workspace created");
+  p.log.success(`${state.ceoName} is taking shape!`);
+  if (modules.length > 0) {
+    p.log.info(`Connected: ${modules.join(", ")}`);
+  }
 
   // --- LLM setup ---
+  p.log.step("One last thing \u2014 let's pick a brain for your CEO.");
   await runSetup(dir);
 
-  p.outro("Setup complete! Run `freeturtle start` to launch your CEO.");
+  console.log(`
+  ${state.ceoName} is ready. 🐢
+
+  Start:    freeturtle start
+  Chat:     freeturtle start --chat
+  Status:   freeturtle status
+
+  Config:   ~/.freeturtle/config.md
+  Soul:     ~/.freeturtle/soul.md
+  `);
+
+  p.outro(`Go get 'em, ${state.ceoName}!`);
 }

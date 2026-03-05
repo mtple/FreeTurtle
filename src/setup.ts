@@ -71,7 +71,7 @@ const PROVIDER_ORDER: LLMProvider[] = [
 
 export async function runSetup(dir: string): Promise<void> {
   const providerKey = (await p.select({
-    message: "Which LLM provider?",
+    message: "Pick a brain for your CEO",
     options: PROVIDER_ORDER.map((key) => ({
       value: key,
       label: PROVIDERS[key].label,
@@ -140,7 +140,7 @@ export async function runSetup(dir: string): Promise<void> {
     // config.md may not exist yet (standalone setup run)
   }
 
-  p.log.success(`Saved to ${envPath}`);
+  p.log.success(`Brain connected! Using ${info.label} / ${finalModel}`);
 }
 
 function updateConfigLlm(
