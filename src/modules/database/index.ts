@@ -1,4 +1,5 @@
 import type { FreeTurtleModule, ToolDefinition } from "../types.js";
+import { withRetry } from "../../reliability.js";
 import { DatabaseClient } from "./client.js";
 import { databaseTools } from "./tools.js";
 
@@ -10,7 +11,7 @@ export class DatabaseModule implements FreeTurtleModule {
 
   async initialize(
     _config: Record<string, unknown>,
-    env: Record<string, string>
+    env: Record<string, string>,
   ): Promise<void> {
     const url = env.DATABASE_URL;
     if (!url) throw new Error("Database module requires DATABASE_URL");
@@ -27,11 +28,13 @@ export class DatabaseModule implements FreeTurtleModule {
   ): Promise<string> {
     switch (name) {
       case "query_database": {
-        const result = await this.client.query(input.sql as string);
+        const result = await withRetry(() =>
+          this.client.query(input.sql as string)
+        );
         return JSON.stringify({ rowCount: result.rowCount, rows: result.rows });
       }
       case "list_tables": {
-        const tables = await this.client.listTables();
+        const tables = await withRetry(() => this.client.listTables());
         return JSON.stringify(tables);
       }
       default:

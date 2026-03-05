@@ -76,7 +76,8 @@ export class GitHubClient {
     repo: string,
     path: string,
     content: string,
-    message: string
+    message: string,
+    branch?: string
   ): Promise<CommitResult> {
     const { owner, repo: name } = this.parseRepo(repo);
 
@@ -87,6 +88,7 @@ export class GitHubClient {
         owner,
         repo: name,
         path,
+        ...(branch ? { ref: branch } : {}),
       });
       if (!Array.isArray(data) && data.type === "file") {
         existingSha = data.sha;
@@ -102,6 +104,7 @@ export class GitHubClient {
       message,
       content: Buffer.from(content).toString("base64"),
       sha: existingSha,
+      ...(branch ? { branch } : {}),
     });
 
     return {

@@ -442,6 +442,14 @@ ${state.founderName}.
     "### onchain",
     `- enabled: ${state.onchain}`,
     "",
+    "## Policy",
+    "### github",
+    "- approval_required_branches: main",
+    "",
+    "### approvals",
+    "- timeout_seconds: 300",
+    "- fail_mode: deny",
+    "",
   ];
   await writeFile(join(dir, "config.md"), configLines.join("\n"), "utf-8");
 

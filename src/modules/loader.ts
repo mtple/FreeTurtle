@@ -1,4 +1,5 @@
 import type { FreeTurtleConfig } from "../config.js";
+import type { PolicyConfig } from "../policy.js";
 import type { FreeTurtleModule } from "./types.js";
 import type { Logger } from "../logger.js";
 import { FarcasterModule } from "./farcaster/index.js";
@@ -18,7 +19,8 @@ const MODULE_MAP: Record<string, new () => FreeTurtleModule> = {
 export async function loadModules(
   config: FreeTurtleConfig,
   env: Record<string, string>,
-  logger?: Logger
+  logger?: Logger,
+  policy?: PolicyConfig,
 ): Promise<FreeTurtleModule[]> {
   const modules: FreeTurtleModule[] = [];
 
@@ -35,7 +37,8 @@ export async function loadModules(
       const mod = new ModuleClass();
       await mod.initialize(
         moduleConfig as unknown as Record<string, unknown>,
-        env
+        env,
+        { policy },
       );
       modules.push(mod);
     } catch (err) {

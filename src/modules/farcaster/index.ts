@@ -1,4 +1,7 @@
 import type { FreeTurtleModule, ToolDefinition } from "../types.js";
+import type { PolicyConfig } from "../../policy.js";
+import { assertFarcasterChannelAllowed } from "../../policy.js";
+import { withRetry } from "../../reliability.js";
 import { NeynarClient } from "./client.js";
 import { farcasterTools } from "./tools.js";
 
@@ -8,10 +11,12 @@ export class FarcasterModule implements FreeTurtleModule {
 
   private client!: NeynarClient;
   private fid!: number;
+  private policy?: PolicyConfig;
 
   async initialize(
-    config: Record<string, unknown>,
-    env: Record<string, string>
+    _config: Record<string, unknown>,
+    env: Record<string, string>,
+    options?: { policy?: PolicyConfig },
   ): Promise<void> {
     const apiKey = env.NEYNAR_API_KEY;
     const signerUuid = env.FARCASTER_SIGNER_UUID;
@@ -23,6 +28,7 @@ export class FarcasterModule implements FreeTurtleModule {
 
     this.client = new NeynarClient(apiKey, signerUuid);
     this.fid = fid ? parseInt(fid, 10) : 0;
+    this.policy = options?.policy;
   }
 
   getTools(): ToolDefinition[] {
@@ -33,19 +39,28 @@ export class FarcasterModule implements FreeTurtleModule {
     name: string,
     input: Record<string, unknown>
   ): Promise<string> {
+    // Enforce channel allowlist for channel-scoped operations
+    if (input.channel_id) {
+      assertFarcasterChannelAllowed(this.policy, input.channel_id as string);
+    }
+
     switch (name) {
       case "post_cast": {
-        const result = await this.client.postCast(input.text as string, {
-          channelId: input.channel_id as string | undefined,
-          embeds: input.embeds as string[] | undefined,
-        });
+        const result = await withRetry(() =>
+          this.client.postCast(input.text as string, {
+            channelId: input.channel_id as string | undefined,
+            embeds: input.embeds as string[] | undefined,
+          })
+        );
         return JSON.stringify(result);
       }
 
       case "read_channel": {
-        const casts = await this.client.getCasts(
-          input.channel_id as string,
-          (input.limit as number) ?? 10
+        const casts = await withRetry(() =>
+          this.client.getCasts(
+            input.channel_id as string,
+            (input.limit as number) ?? 10
+          )
         );
         const summary = casts.map((c) => ({
           hash: c.hash,
@@ -61,17 +76,30 @@ export class FarcasterModule implements FreeTurtleModule {
 
       case "read_mentions": {
         if (!this.fid) return "Error: FARCASTER_FID not set, cannot read mentions.";
-        const mentions = await this.client.getMentions(
-          this.fid,
-          (input.limit as number) ?? 10
+        const mentions = await withRetry(() =>
+          this.client.getMentions(
+            this.fid,
+            (input.limit as number) ?? 10
+          )
         );
         return JSON.stringify(mentions);
       }
 
       case "reply_to_cast": {
-        const result = await this.client.replyCast(
-          input.parent_hash as string,
-          input.text as string
+        const result = await withRetry(() =>
+          this.client.replyCast(
+            input.parent_hash as string,
+            input.text as string
+          )
+        );
+        return JSON.stringify(result);
+      }
+
+      case "delete_cast": {
+        const result = await withRetry(() =>
+          this.client.deleteCast(
+            input.target_hash as string
+          )
         );
         return JSON.stringify(result);
       }

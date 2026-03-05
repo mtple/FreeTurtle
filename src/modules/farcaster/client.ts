@@ -109,4 +109,25 @@ export class NeynarClient {
   async replyCast(parentHash: string, text: string): Promise<CastResponse> {
     return this.postCast(text, { parent: parentHash });
   }
+
+  async deleteCast(targetHash: string): Promise<{ success: boolean }> {
+    const res = await fetch(`${BASE_URL}/cast`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": this.apiKey,
+      },
+      body: JSON.stringify({
+        signer_uuid: this.signerUuid,
+        target_hash: targetHash,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Neynar deleteCast failed (${res.status}): ${err}`);
+    }
+
+    return { success: true };
+  }
 }

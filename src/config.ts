@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { type PolicyConfig, parsePolicy } from "./policy.js";
 
 export interface CronTask {
   schedule: string;
@@ -31,6 +32,7 @@ export interface FreeTurtleConfig {
   cron: Record<string, CronTask>;
   channels: Record<string, ChannelConfig>;
   modules: Record<string, ModuleConfig>;
+  policy: PolicyConfig;
 }
 
 export async function loadConfig(dir: string): Promise<FreeTurtleConfig> {
@@ -48,11 +50,14 @@ export async function loadConfig(dir: string): Promise<FreeTurtleConfig> {
 }
 
 function parseConfig(raw: string): FreeTurtleConfig {
+  const policyRaw: Record<string, Record<string, string | boolean>> = {};
+
   const config: FreeTurtleConfig = {
     llm: { provider: "claude_api", model: "claude-sonnet-4-5-20250514", max_tokens: 4096 },
     cron: {},
     channels: {},
     modules: {},
+    policy: undefined as unknown as PolicyConfig, // parsed after loop
   };
 
   let currentSection: string | null = null;
@@ -104,9 +109,15 @@ function parseConfig(raw: string): FreeTurtleConfig {
         config.modules[currentSubSection] = { enabled: false };
       }
       config.modules[currentSubSection][key] = parseValue(value);
+    } else if (currentSection === "policy" && currentSubSection) {
+      if (!policyRaw[currentSubSection]) {
+        policyRaw[currentSubSection] = {};
+      }
+      policyRaw[currentSubSection][key] = parseValue(value);
     }
   }
 
+  config.policy = parsePolicy(policyRaw);
   return config;
 }
 

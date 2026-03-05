@@ -81,6 +81,7 @@ Post and read casts via the Neynar API.
 | `read_channel` | Read recent casts from a channel |
 | `read_mentions` | Read notifications and mentions |
 | `reply_to_cast` | Reply to a cast by hash |
+| `delete_cast` | Delete a cast (requires owner approval) |
 
 **Env:** `NEYNAR_API_KEY`, `FARCASTER_SIGNER_UUID`, `FARCASTER_FID`
 
@@ -134,6 +135,8 @@ FreeTurtle stores everything in `~/.freeturtle/`:
     │   ├── posting-log.json
     │   ├── post-queue.json
     │   └── session-notes/
+    ├── audit/           # Daily audit logs
+    ├── approvals/       # Pending/resolved approval requests
     └── strategy/
 ```
 
@@ -195,6 +198,9 @@ freeturtle status            # Show daemon status
 freeturtle send "message"    # Send a message to the running operator
 freeturtle setup             # Reconfigure LLM provider
 freeturtle connect farcaster # Set up Farcaster signer
+freeturtle approvals         # List pending approval requests
+freeturtle approve <id>      # Approve a pending action
+freeturtle reject <id>       # Reject a pending action
 ```
 
 ## Hosting
@@ -220,15 +226,81 @@ freeturtle install-service  # auto-restart on reboot
 
 The operator is effectively a team member who needs its own accounts. Identity separation keeps things clean.
 
+## Policy & Approvals
+
+FreeTurtle enforces per-module allowlists and requires owner approval for destructive actions.
+
+### Policy Config
+
+Add a `## Policy` section to `config.md`:
+
+```markdown
+## Policy
+### github
+- allowed_repos: myorg/myrepo, myorg/other-repo
+- allowed_paths: strategy/, docs/
+- approval_required_branches: main
+
+### farcaster
+- allowed_channels: tortoise, music
+
+### onchain
+- allowed_contracts: 0x1234...
+- allowed_read_functions: balanceOf, totalSupply
+
+### approvals
+- timeout_seconds: 300
+- fail_mode: deny
+```
+
+**Allowlist rules:**
+- Not set → allow all (no restriction)
+- Empty list → deny everything
+- Populated list → only allow listed values
+
+### Approval Flow
+
+Some actions require owner approval before execution:
+
+- `delete_cast` — always requires approval
+- `commit_file` to a protected branch (default: `main`) — requires approval
+
+When approval is needed, FreeTurtle notifies you via Telegram/terminal with the approval ID. You can then:
+
+```bash
+freeturtle approvals          # See pending requests
+freeturtle approve <id>       # Allow the action
+freeturtle reject <id>        # Block the action
+```
+
+If no decision is made within the timeout (default 5 minutes), the action is denied (configurable via `fail_mode`).
+
+### Audit Log
+
+Every task run is logged to `workspace/audit/YYYY-MM-DD/{runId}.json` with:
+- Tool calls made (with redacted inputs)
+- Duration, retries, approval decisions
+- Success/error status
+
+### Reliability
+
+All external API calls (Neynar, GitHub, Postgres, BaseScan, RPC) are wrapped with:
+- Automatic retry with exponential backoff + jitter
+- Timeout protection (30s default)
+- Smart error classification (retry on 429/5xx/network errors, fail fast on 4xx)
+
 ## Safety Architecture
 
 FreeTurtle is designed to be safe to run locally:
 
 - **No shell execution** — the operator cannot run arbitrary commands
 - **Closed tool set** — only the tools defined by enabled modules are available
+- **Policy allowlists** — per-module restrictions on repos, paths, channels, contracts
+- **Owner approval** — destructive actions require explicit approval before execution
 - **Read-only database** — all SQL runs in read-only transactions
 - **Read-only onchain** — no wallet, no signing, no transactions
 - **Owner-only chat** — Telegram only responds to the configured owner ID
+- **Audit trail** — every tool call is logged with redacted inputs
 
 ## Security Best Practices
 

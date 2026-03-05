@@ -11,6 +11,11 @@ import { runSetup } from "../src/setup.js";
 import { connectFarcaster } from "../src/cli/connect-farcaster.js";
 import { runInstallService } from "../src/cli/install-service.js";
 import { runUpdate } from "../src/cli/update.js";
+import {
+  runApprove,
+  runReject,
+  runListApprovals,
+} from "../src/cli/approvals.js";
 
 const DEFAULT_DIR = join(homedir(), ".freeturtle");
 
@@ -89,6 +94,31 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
     await runInstallService(opts.dir);
+  });
+
+program
+  .command("approve <id>")
+  .description("Approve a pending action")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (id, opts) => {
+    await runApprove(opts.dir, id);
+  });
+
+program
+  .command("reject <id>")
+  .description("Reject a pending action")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .option("--reason <reason>", "Rejection reason")
+  .action(async (id, opts) => {
+    await runReject(opts.dir, id, opts.reason);
+  });
+
+program
+  .command("approvals")
+  .description("List pending approval requests")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    await runListApprovals(opts.dir);
   });
 
 const connect = program

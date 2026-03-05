@@ -1,4 +1,7 @@
 import type { FreeTurtleModule, ToolDefinition } from "../types.js";
+import type { PolicyConfig } from "../../policy.js";
+import { assertOnchainScopeAllowed } from "../../policy.js";
+import { withRetry } from "../../reliability.js";
 import { OnchainClient } from "./client.js";
 import { onchainTools } from "./tools.js";
 
@@ -7,14 +10,17 @@ export class OnchainModule implements FreeTurtleModule {
   description = "Read smart contracts, balances, and transactions on Base.";
 
   private client!: OnchainClient;
+  private policy?: PolicyConfig;
 
   async initialize(
     _config: Record<string, unknown>,
-    env: Record<string, string>
+    env: Record<string, string>,
+    options?: { policy?: PolicyConfig },
   ): Promise<void> {
     const rpcUrl = env.RPC_URL;
     if (!rpcUrl) throw new Error("Onchain module requires RPC_URL");
     this.client = new OnchainClient(rpcUrl, env.BASESCAN_API_KEY);
+    this.policy = options?.policy;
   }
 
   getTools(): ToolDefinition[] {
@@ -27,22 +33,33 @@ export class OnchainModule implements FreeTurtleModule {
   ): Promise<string> {
     switch (name) {
       case "read_contract": {
-        const result = await this.client.readContract(
+        assertOnchainScopeAllowed(
+          this.policy,
           input.address as string,
-          input.abi as unknown[],
           input.function_name as string,
-          input.args as unknown[] | undefined
+        );
+        const result = await withRetry(() =>
+          this.client.readContract(
+            input.address as string,
+            input.abi as unknown[],
+            input.function_name as string,
+            input.args as unknown[] | undefined
+          )
         );
         return JSON.stringify(result);
       }
       case "get_balance": {
-        const balance = await this.client.getBalance(input.address as string);
+        const balance = await withRetry(() =>
+          this.client.getBalance(input.address as string)
+        );
         return `${balance} ETH`;
       }
       case "get_transactions": {
-        const txs = await this.client.getTransactions(
-          input.address as string,
-          (input.limit as number) ?? 10
+        const txs = await withRetry(() =>
+          this.client.getTransactions(
+            input.address as string,
+            (input.limit as number) ?? 10
+          )
         );
         return JSON.stringify(txs);
       }

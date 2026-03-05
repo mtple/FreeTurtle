@@ -77,14 +77,24 @@ export class FreeTurtleDaemon {
     });
     this.logger.info(`LLM: ${provider} / ${config.llm.model}`);
 
-    // Load modules
-    const modules = await loadModules(config, env, this.logger);
+    // Load modules (pass policy for allowlist enforcement)
+    const modules = await loadModules(config, env, this.logger, config.policy);
     this.logger.info(
       `Modules: ${modules.map((m) => m.name).join(", ") || "none"}`
     );
 
-    // Create runner
-    this.runner = new TaskRunner(this.dir, llm, modules, this.logger);
+    // Create runner with policy and approval notifications
+    this.runner = new TaskRunner(this.dir, llm, modules, this.logger, {
+      policy: config.policy,
+      onApprovalNeeded: (msg) => {
+        this.logger.info(`Approval notification: ${msg.slice(0, 100)}`);
+        for (const ch of this.channels) {
+          ch.send(msg).catch((err) => {
+            this.logger.error(`Failed to send approval notification via ${ch.name}: ${err}`);
+          });
+        }
+      },
+    });
 
     // Start scheduler
     if (Object.keys(config.cron).length > 0) {
@@ -238,6 +248,42 @@ export class FreeTurtleDaemon {
         const msg = err instanceof Error ? err.message : "Unknown error";
         this.logger.error(`IPC send failed: ${msg}`);
         return `Error: ${msg}`;
+      }
+    }
+
+    if (command.startsWith("approve ")) {
+      const id = command.slice(8).trim();
+      if (!this.runner) return "Error: runner not initialized";
+      try {
+        const req = await this.runner.getApprovalManager().approve(id, "ipc");
+        return JSON.stringify(req, null, 2);
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : "unknown"}`;
+      }
+    }
+
+    if (command.startsWith("reject ")) {
+      const parts = command.slice(7).trim();
+      const spaceIdx = parts.indexOf(" ");
+      const id = spaceIdx > -1 ? parts.slice(0, spaceIdx) : parts;
+      const reason = spaceIdx > -1 ? parts.slice(spaceIdx + 1) : undefined;
+      if (!this.runner) return "Error: runner not initialized";
+      try {
+        const req = await this.runner.getApprovalManager().reject(id, reason, "ipc");
+        return JSON.stringify(req, null, 2);
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : "unknown"}`;
+      }
+    }
+
+    if (command === "approvals") {
+      if (!this.runner) return "Error: runner not initialized";
+      try {
+        const pending = await this.runner.getApprovalManager().list("pending");
+        if (pending.length === 0) return "No pending approvals.";
+        return JSON.stringify(pending, null, 2);
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : "unknown"}`;
       }
     }
 

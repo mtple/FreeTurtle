@@ -23,7 +23,8 @@ export interface FreeTurtleModule {
 
   initialize(
     config: Record<string, unknown>,
-    env: Record<string, string>
+    env: Record<string, string>,
+    options?: { policy?: import("../policy.js").PolicyConfig },
   ): Promise<void>;
 
   getTools(): ToolDefinition[];

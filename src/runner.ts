@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { loadSoul } from "./soul.js";
 import { readMemoryFile, writeMemoryFile } from "./memory.js";
 import type { LLMClient } from "./llm.js";
@@ -9,6 +10,11 @@ import type {
   FreeTurtleModule,
 } from "./modules/types.js";
 import type { Logger } from "./logger.js";
+import type { PolicyConfig } from "./policy.js";
+import { PolicyDeniedError, requiresApproval } from "./policy.js";
+import { ApprovalManager } from "./approval.js";
+import { AuditLogger, type AuditToolCall } from "./audit.js";
+import { redact } from "./redaction.js";
 
 export interface TaskConfig {
   name: string;
@@ -23,43 +29,70 @@ export interface TaskResult {
   durationMs: number;
 }
 
+export type ApprovalNotifier = (message: string) => void;
+
 export class TaskRunner {
   private dir: string;
   private llm: LLMClient;
   private modules: FreeTurtleModule[];
   private logger: Logger;
+  private policy?: PolicyConfig;
+  private approvalManager: ApprovalManager;
+  private auditLogger: AuditLogger;
+  private onApprovalNeeded?: ApprovalNotifier;
 
   constructor(
     dir: string,
     llm: LLMClient,
     modules: FreeTurtleModule[],
-    logger: Logger
+    logger: Logger,
+    options?: {
+      policy?: PolicyConfig;
+      onApprovalNeeded?: ApprovalNotifier;
+    },
   ) {
     this.dir = dir;
     this.llm = llm;
     this.modules = modules;
     this.logger = logger;
+    this.policy = options?.policy;
+    this.approvalManager = new ApprovalManager(dir);
+    this.auditLogger = new AuditLogger(dir);
+    this.onApprovalNeeded = options?.onApprovalNeeded;
   }
 
   async runTask(task: TaskConfig): Promise<TaskResult> {
     const start = Date.now();
+    const runId = randomUUID();
     const toolsCalled: string[] = [];
+    const auditToolCalls: AuditToolCall[] = [];
 
-    this.logger.info(`Running task: ${task.name}`);
+    this.logger.info(`Running task: ${task.name} (run ${runId})`);
 
     const systemPrompt = await this.buildSystemPrompt(task.isHeartbeat);
     const tools = this.collectTools();
-    const executor = this.buildExecutor(toolsCalled);
+    const executor = this.buildExecutor(runId, toolsCalled, auditToolCalls);
 
-    const response = await this.llm.agentLoop(
-      systemPrompt,
-      task.prompt,
-      tools,
-      executor
-    );
+    let response: string;
+    let status: "success" | "error" = "success";
+    let errorMsg: string | undefined;
+
+    try {
+      response = await this.llm.agentLoop(
+        systemPrompt,
+        task.prompt,
+        tools,
+        executor
+      );
+    } catch (err) {
+      status = "error";
+      errorMsg = err instanceof Error ? err.message : "Unknown error";
+      response = `Error: ${errorMsg}`;
+      this.logger.error(`Task ${task.name} failed: ${errorMsg}`);
+    }
 
     // Save output file if specified
-    if (task.output) {
+    if (task.output && status === "success") {
       const outputPath = task.output.replace(
         "{{date}}",
         new Date().toISOString().slice(0, 10)
@@ -89,7 +122,26 @@ export class TaskRunner {
       JSON.stringify(sessionNote, null, 2)
     );
 
+    // Write audit record
     const durationMs = Date.now() - start;
+    try {
+      await this.auditLogger.writeRecord({
+        runId,
+        taskName: task.name,
+        startedAt: new Date(start).toISOString(),
+        completedAt: new Date().toISOString(),
+        status,
+        promptPreview: task.prompt.slice(0, 200),
+        toolCalls: auditToolCalls,
+        totalDurationMs: durationMs,
+        error: errorMsg,
+      });
+    } catch (auditErr) {
+      this.logger.error(
+        `Failed to write audit record: ${auditErr instanceof Error ? auditErr.message : "unknown"}`
+      );
+    }
+
     this.logger.info(
       `Task ${task.name} completed in ${durationMs}ms (${toolsCalled.length} tool calls)`
     );
@@ -103,7 +155,8 @@ export class TaskRunner {
     const systemPrompt = await this.buildSystemPrompt(false);
     const tools = this.collectTools();
     const toolsCalled: string[] = [];
-    const executor = this.buildExecutor(toolsCalled);
+    const auditToolCalls: AuditToolCall[] = [];
+    const executor = this.buildExecutor(randomUUID(), toolsCalled, auditToolCalls);
 
     const response = await this.llm.agentLoop(
       systemPrompt,
@@ -116,6 +169,10 @@ export class TaskRunner {
       `Replied to ${channel} (${toolsCalled.length} tool calls)`
     );
     return response;
+  }
+
+  getApprovalManager(): ApprovalManager {
+    return this.approvalManager;
   }
 
   private async buildSystemPrompt(isHeartbeat?: boolean): Promise<string> {
@@ -194,22 +251,111 @@ export class TaskRunner {
     return tools;
   }
 
-  private buildExecutor(toolsCalled: string[]) {
+  private buildExecutor(
+    runId: string,
+    toolsCalled: string[],
+    auditToolCalls: AuditToolCall[],
+  ) {
     return async (call: ToolCall): Promise<string> => {
+      const toolStart = Date.now();
       toolsCalled.push(call.name);
       this.logger.info(`Tool call: ${call.name}`);
 
+      // Check if this tool requires approval
+      if (requiresApproval(this.policy, call.name, call.input)) {
+        const timeoutSeconds = this.policy?.approvals?.timeout_seconds ?? 300;
+        const failMode = this.policy?.approvals?.fail_mode ?? "deny";
+
+        const redactedInput = redact(call.input) as Record<string, unknown>;
+        const approvalReq = await this.approvalManager.createRequest({
+          runId,
+          toolName: call.name,
+          reason: `Tool "${call.name}" requires owner approval`,
+          input: redactedInput,
+          timeoutSeconds,
+        });
+
+        this.logger.info(
+          `Approval required for ${call.name} — request ${approvalReq.id}`
+        );
+
+        // Notify owner through channels
+        if (this.onApprovalNeeded) {
+          this.onApprovalNeeded(
+            `⚠️ Approval needed: ${call.name}\n` +
+            `Input: ${JSON.stringify(redactedInput)}\n` +
+            `Approve: freeturtle approve ${approvalReq.id}\n` +
+            `Reject: freeturtle reject ${approvalReq.id}`
+          );
+        }
+
+        const decision = await this.approvalManager.waitForDecision(
+          approvalReq.id,
+          timeoutSeconds * 1000
+        );
+
+        if (decision.status !== "approved") {
+          const reason = decision.status === "rejected"
+            ? `Rejected${decision.rejectReason ? `: ${decision.rejectReason}` : ""}`
+            : failMode === "allow" ? null : `${decision.status} (fail_mode: deny)`;
+
+          if (reason) {
+            auditToolCalls.push({
+              name: call.name,
+              input: redactedInput,
+              error: reason,
+              durationMs: Date.now() - toolStart,
+              retries: 0,
+              approvalId: approvalReq.id,
+              approvalStatus: decision.status,
+            });
+            return `Error: ${reason}`;
+          }
+          // fail_mode: allow — proceed despite expiry
+        }
+
+        this.logger.info(`Approval granted for ${call.name}`);
+      }
+
+      // Execute the tool
       for (const mod of this.modules) {
         const toolNames = mod.getTools().map((t) => t.name);
         if (toolNames.includes(call.name)) {
           try {
-            return await mod.executeTool(call.name, call.input);
+            const result = await mod.executeTool(call.name, call.input);
+            auditToolCalls.push({
+              name: call.name,
+              input: redact(call.input) as Record<string, unknown>,
+              output: result.slice(0, 500),
+              durationMs: Date.now() - toolStart,
+              retries: 0,
+            });
+            return result;
           } catch (err) {
             const msg =
               err instanceof Error ? err.message : "Unknown error";
-            this.logger.error(
-              `Tool ${call.name} failed: ${msg}`
-            );
+
+            // PolicyDeniedError — don't retry, surface clearly
+            if (err instanceof PolicyDeniedError) {
+              this.logger.warn(`Policy denied ${call.name}: ${msg}`);
+              auditToolCalls.push({
+                name: call.name,
+                input: redact(call.input) as Record<string, unknown>,
+                error: msg,
+                durationMs: Date.now() - toolStart,
+                retries: 0,
+              });
+              return `Error: ${msg}`;
+            }
+
+            this.logger.error(`Tool ${call.name} failed: ${msg}`);
+            auditToolCalls.push({
+              name: call.name,
+              input: redact(call.input) as Record<string, unknown>,
+              error: msg,
+              durationMs: Date.now() - toolStart,
+              retries: 0,
+            });
             return `Error: ${msg}`;
           }
         }

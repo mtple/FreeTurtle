@@ -78,4 +78,19 @@ export const farcasterTools: ToolDefinition[] = [
       required: ["parent_hash", "text"],
     },
   },
+  {
+    name: "delete_cast",
+    description:
+      "Delete a cast by its hash. This action requires owner approval and cannot be undone.",
+    input_schema: {
+      type: "object",
+      properties: {
+        target_hash: {
+          type: "string",
+          description: "The hash of the cast to delete",
+        },
+      },
+      required: ["target_hash"],
+    },
+  },
 ];
