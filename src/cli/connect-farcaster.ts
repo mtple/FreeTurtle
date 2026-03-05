@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { readFile, writeFile } from "node:fs/promises";
+import { chmod, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ViemLocalEip712Signer } from "@farcaster/hub-nodejs";
 import { bytesToHex, hexToBytes } from "viem";
@@ -284,6 +284,7 @@ export async function connectFarcaster(dir: string): Promise<{
   }
 
   await writeFile(envPath, envContent, "utf-8");
+  await chmod(envPath, 0o600);
   p.log.success("Credentials saved to .env");
 
   p.outro("Farcaster connected!");

@@ -230,6 +230,41 @@ FreeTurtle is designed to be safe to run locally:
 - **Read-only onchain** — no wallet, no signing, no transactions
 - **Owner-only chat** — Telegram only responds to the configured owner ID
 
+## Security Best Practices
+
+### Secrets
+
+Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it to `chmod 600` (owner-read-only) when writing it.
+
+- **Never commit `.env` to git.** It's in `.gitignore` by default — don't override this.
+- **Never paste secrets into AI coding tools.** Tools like Claude Code, Codex, Cursor, and Copilot may log or transmit your input. If an AI tool asks you to paste an API key, token, or recovery phrase into chat — don't. Enter secrets only through FreeTurtle's setup wizard, which writes directly to `.env` on your local machine.
+- **Rotate keys if exposed.** If a secret is accidentally committed, posted, or shared, revoke it immediately and generate a new one. Treat every key as compromised the moment it leaves your machine.
+- **Your Farcaster recovery phrase is the most sensitive secret.** It controls the entire account. FreeTurtle only uses it once during `connect farcaster` to sign a key request locally — it is never stored or transmitted.
+
+### SSH Keys
+
+- Download your SSH private key when creating the instance — you can't retrieve it later
+- Store it securely (e.g. `~/.ssh/`) with `chmod 400`
+- Don't share it or commit it to any repository
+- If lost, you lose access to the server
+
+### Git
+
+- `.env` is in `.gitignore` — don't remove it
+- If you version-control your `~/.freeturtle/` config, exclude `.env`
+- If you accidentally commit secrets, rotate them immediately — git history is permanent
+
+### Firewall
+
+- Oracle Cloud has two firewalls: the cloud security list AND the OS-level iptables
+- Only open ports you actually need
+- SSH (port 22) is open by default — everything else is closed
+- See the [Oracle setup guide](docs/oracle-cloud-setup.md) for details
+
+### Cloud Provider Access
+
+Your cloud provider (Oracle, AWS, GCP) has full access to the underlying infrastructure — they can technically read any file on your VM. This is true of all cloud computing and is covered by their terms of service. For most use cases this is fine. If this is unacceptable for your threat model, run FreeTurtle on hardware you physically control.
+
 ## The Two-Turtle Vision (v0.2)
 
 The current v0.1 is a single-process operator. v0.2 will split it into two:

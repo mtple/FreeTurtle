@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runSetup } from "../setup.js";
 import { connectFarcaster } from "./connect-farcaster.js";
@@ -454,7 +454,9 @@ ${state.founderName}.
   if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
   if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
   if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);
-  await writeFile(join(dir, ".env"), envLines.join("\n") + "\n", "utf-8");
+  const envFilePath = join(dir, ".env");
+  await writeFile(envFilePath, envLines.join("\n") + "\n", "utf-8");
+  await chmod(envFilePath, 0o600);
 
   await writeFile(join(dir, "workspace", "memory", "posting-log.json"), "[]", "utf-8");
   await writeFile(join(dir, "workspace", "memory", "post-queue.json"), "[]", "utf-8");

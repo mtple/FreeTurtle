@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { writeFile, readFile } from "node:fs/promises";
+import { chmod, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { LLMProvider } from "./llm.js";
 
@@ -124,6 +124,7 @@ export async function runSetup(dir: string): Promise<void> {
   };
 
   await writeFile(envPath, mergeEnv(existing, newVars), "utf-8");
+  await chmod(envPath, 0o600);
 
   // Update config.md LLM section
   const configPath = join(dir, "config.md");
