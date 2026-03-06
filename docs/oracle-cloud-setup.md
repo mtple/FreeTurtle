@@ -2,6 +2,8 @@
 
 FreeTurtle runs great on Oracle Cloud's free ARM instance: 4 CPUs, 24 GB RAM, always free.
 
+> **Tip:** If you're not comfortable with cloud setup, paste this entire guide into ChatGPT, Claude, or any AI chat and ask it to walk you through step by step. It can answer questions as you go — screenshots help too.
+
 ## Account Setup
 
 1. Sign up at [cloud.oracle.com](https://cloud.oracle.com) (credit card required, $1 auth hold)
@@ -104,27 +106,49 @@ If you get "Out of capacity":
 
 Once your instance is running, you need to connect to it from your computer's terminal (Terminal on Mac, PowerShell on Windows).
 
-**1. Find your private key file.** When you created the instance, you downloaded a `.key` file. Find where it is — probably in your Downloads folder.
+**1. Find your key files.** When you created the instance, you downloaded a `.key` file (and a `.pub` file). Find them — probably in your Downloads folder.
 
-**2. Move it somewhere safe.** Open your terminal and run:
+**2. Create a connection folder.** Keep your key and a connect script together somewhere easy to find — like a folder on your Desktop or in your projects directory:
 ```bash
-mkdir -p ~/.ssh
-mv ~/Downloads/ssh-key-*.key ~/.ssh/my-server-key.key
+mkdir -p ~/Desktop/my-server-ssh
+mv ~/Downloads/ssh-key-*.key ~/Desktop/my-server-ssh/
+mv ~/Downloads/ssh-key-*.pub ~/Desktop/my-server-ssh/
 ```
 
 **3. Lock down permissions.** SSH refuses to use a key file that other users can read:
 ```bash
-chmod 400 ~/.ssh/my-server-key.key
+chmod 400 ~/Desktop/my-server-ssh/ssh-key-*.key
 ```
 
 **4. Find your server's public IP.** Go to **Compute > Instances** in the Oracle console, click your instance, and copy the **Public IP address**.
 
-**5. Connect:**
+**5. Create a connect script.** This saves you from remembering the full command every time:
 ```bash
-ssh -i ~/.ssh/my-server-key.key ubuntu@<PASTE_YOUR_PUBLIC_IP>
+cat > ~/Desktop/my-server-ssh/connect.sh << 'EOF'
+#!/bin/bash
+ssh -i "$(dirname "$0")"/ssh-key-*.key ubuntu@<PASTE_YOUR_PUBLIC_IP>
+EOF
+chmod +x ~/Desktop/my-server-ssh/connect.sh
 ```
 
-Type `yes` when asked about the fingerprint. You're now on your server.
+Replace `<PASTE_YOUR_PUBLIC_IP>` with your actual IP address.
+
+**6. Connect:**
+```bash
+~/Desktop/my-server-ssh/connect.sh
+```
+
+Type `yes` when asked about the fingerprint. You're now on your server. From now on, just run `connect.sh` to reconnect.
+
+Your folder should look like this:
+```
+my-server-ssh/
+├── connect.sh
+├── ssh-key-2026-02-16.key
+└── ssh-key-2026-02-16.key.pub
+```
+
+> **Never share your private key file** — not in AI chats, not in screenshots, not in git. If someone has your key, they have full access to your server.
 
 ### Install Node.js
 ```bash
@@ -134,12 +158,12 @@ sudo apt-get install -y nodejs
 
 ### Install pnpm
 ```bash
-npm install -g pnpm
+sudo npm install -g pnpm
 ```
 
 ### Install FreeTurtle
 ```bash
-pnpm install -g freeturtle
+sudo pnpm install -g freeturtle
 ```
 
 ### Set Up Your CEO
