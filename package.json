@@ -7,6 +7,12 @@
   "bin": {
     "freeturtle": "dist/bin/freeturtle.js"
   },
+  "files": [
+    "dist/bin",
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
