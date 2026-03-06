@@ -88,9 +88,9 @@ Go to **Compute > Instances > Create Instance**.
 - You cannot retrieve the private key later
 
 ### 7. Boot Volume
-- Default 46.6 GB — fine as-is
-- In-transit encryption: enabled
-- Estimated cost may show ~$2/month — this is a display bug, actual cost is $0
+- Leave defaults (46.6 GB, no custom size)
+- Use in-transit encryption: **On** (default)
+- Don't check "Encrypt this volume with a key that you manage"
 
 ### 8. Create
 If you get "Out of capacity":
@@ -101,10 +101,30 @@ If you get "Out of capacity":
 ## Server Setup
 
 ### SSH In
+
+Once your instance is running, you need to connect to it from your computer's terminal (Terminal on Mac, PowerShell on Windows).
+
+**1. Find your private key file.** When you created the instance, you downloaded a `.key` file. Find where it is — probably in your Downloads folder.
+
+**2. Move it somewhere safe.** Open your terminal and run:
 ```bash
-chmod 400 ~/path/to/private-key.key
-ssh -i ~/path/to/private-key.key ubuntu@<PUBLIC_IP>
+mkdir -p ~/.ssh
+mv ~/Downloads/ssh-key-*.key ~/.ssh/my-server-key.key
 ```
+
+**3. Lock down permissions.** SSH refuses to use a key file that other users can read:
+```bash
+chmod 400 ~/.ssh/my-server-key.key
+```
+
+**4. Find your server's public IP.** Go to **Compute > Instances** in the Oracle console, click your instance, and copy the **Public IP address**.
+
+**5. Connect:**
+```bash
+ssh -i ~/.ssh/my-server-key.key ubuntu@<PASTE_YOUR_PUBLIC_IP>
+```
+
+Type `yes` when asked about the fingerprint. You're now on your server.
 
 ### Install Node.js
 ```bash
