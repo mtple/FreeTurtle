@@ -27,7 +27,7 @@ Do this first — the instance creation form's inline networking option does NOT
 2. Create an Internet Gateway — name it anything (e.g. `my-gateway`, `internet-gw`)
 
 ### 3. Add Route Rule
-1. Go to **Resources > Route Tables > Default Route Table**
+1. Inside your VCN, go to **Resources > Routing > Default Route Table**
 2. Click **Add Route Rules**
 3. Target Type: **Internet Gateway**
 4. Destination CIDR: `0.0.0.0/0`
@@ -50,6 +50,7 @@ Get the OCIDs from the Route Table and Internet Gateway detail pages.
 3. Subnet Type: Regional
 4. CIDR: `10.0.0.0/24`
 5. Subnet Access: **Public Subnet**
+6. DNS Resolution: leave **Use DNS hostnames in this Subnet** checked (default)
 
 ## Creating the VM Instance
 
