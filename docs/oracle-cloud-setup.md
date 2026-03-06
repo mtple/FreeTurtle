@@ -10,6 +10,47 @@ FreeTurtle runs great on Oracle Cloud's free ARM instance: 4 CPUs, 24 GB RAM, al
 
 > **Why Pay-As-You-Go?** The free tier alone often shows "Out of capacity" when creating ARM instances. Upgrading to PAYG dramatically improves availability. There's a $100 authorization hold that is NOT charged — as long as you follow this guide and select the free-tier-eligible shape, you will not be billed. This confuses people but it's how Oracle works.
 
+## Networking Setup
+
+Do this first — the instance creation form's inline networking option does NOT properly set up a public subnet.
+
+### 1. Create VCN
+1. Go to **Networking > Virtual Cloud Networks**
+2. Click **Create VCN**
+3. Name: `freeturtle-vcn`
+4. IPv4 CIDR block: `10.0.0.0/16`
+5. DNS hostnames: enabled
+6. Skip IPv6
+
+### 2. Create Internet Gateway
+1. Inside your VCN, go to **Resources > Internet Gateways**
+2. Create Internet Gateway named `freeturtle-gateway`
+
+### 3. Add Route Rule
+1. Go to **Resources > Route Tables > Default Route Table**
+2. Click **Add Route Rules**
+3. Target Type: **Internet Gateway**
+4. Destination CIDR: `0.0.0.0/0`
+5. Target: your gateway
+
+**If the UI gives an error** about "Rules in the route table must use private IP as a target" — this is a known Oracle Console bug. Try:
+- Refresh the page and re-enter the rule
+- Use a different browser or incognito window
+- **If the UI keeps failing, use OCI Cloud Shell** (terminal icon, top-right of console):
+```bash
+oci network route-table update \
+  --rt-id <ROUTE_TABLE_OCID> \
+  --route-rules '[{"destination":"0.0.0.0/0","destinationType":"CIDR_BLOCK","networkEntityId":"<INTERNET_GATEWAY_OCID>"}]'
+```
+Get the OCIDs from the Route Table and Internet Gateway detail pages.
+
+### 4. Create Public Subnet
+1. Inside your VCN, go to **Resources > Subnets > Create Subnet**
+2. Name: `freeturtle-public-subnet`
+3. Subnet Type: Regional
+4. CIDR: `10.0.0.0/24`
+5. Subnet Access: **Public Subnet**
+
 ## Creating the VM Instance
 
 Go to **Compute > Instances > Create Instance**.
@@ -34,47 +75,6 @@ Go to **Compute > Instances > Create Instance**.
 - Confidential computing: **Off**
 
 ### 5. Networking
-
-The inline "Create new virtual cloud network" option does NOT properly set up a public subnet. You must create networking separately first.
-
-#### Step A: Create VCN
-1. Go to **Networking > Virtual Cloud Networks**
-2. Click **Create VCN**
-3. Name: `freeturtle-vcn`
-4. IPv4 CIDR block: `10.0.0.0/16`
-5. DNS hostnames: enabled
-6. Skip IPv6
-
-#### Step B: Create Internet Gateway
-1. Inside your VCN, go to **Resources > Internet Gateways**
-2. Create Internet Gateway named `freeturtle-gateway`
-
-#### Step C: Add Route Rule
-1. Go to **Resources > Route Tables > Default Route Table**
-2. Click **Add Route Rules**
-3. Target Type: **Internet Gateway**
-4. Destination CIDR: `0.0.0.0/0`
-5. Target: your gateway
-
-**If the UI gives an error** about "Rules in the route table must use private IP as a target" — this is a known Oracle Console bug. Try:
-- Refresh the page and re-enter the rule
-- Use a different browser or incognito window
-- **If the UI keeps failing, use OCI Cloud Shell** (terminal icon, top-right of console):
-```bash
-oci network route-table update \
-  --rt-id <ROUTE_TABLE_OCID> \
-  --route-rules '[{"destination":"0.0.0.0/0","destinationType":"CIDR_BLOCK","networkEntityId":"<INTERNET_GATEWAY_OCID>"}]'
-```
-Get the OCIDs from the Route Table and Internet Gateway detail pages.
-
-#### Step D: Create Public Subnet
-1. Inside your VCN, go to **Resources > Subnets > Create Subnet**
-2. Name: `freeturtle-public-subnet`
-3. Subnet Type: Regional
-4. CIDR: `10.0.0.0/24`
-5. Subnet Access: **Public Subnet**
-
-#### Step E: Back in Instance Creation
 1. Primary network: **Select existing virtual cloud network** > your VCN
 2. Subnet: **Select existing subnet** > your public subnet
 3. Private IPv4: Automatically assign
@@ -92,7 +92,7 @@ Get the OCIDs from the Route Table and Internet Gateway detail pages.
 
 ### 8. Create
 If you get "Out of capacity":
-- Try a different Availability Domain (AD 1 or AD 3)
+- Try a different Availability Domain
 - Try reducing to 2 OCPUs / 12 GB RAM
 - Make sure your account is upgraded to Pay-As-You-Go
 
