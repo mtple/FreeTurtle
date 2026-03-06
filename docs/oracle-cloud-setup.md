@@ -15,7 +15,7 @@ FreeTurtle runs great on Oracle Cloud's free ARM instance: 4 CPUs, 24 GB RAM, al
 Go to **Compute > Instances > Create Instance**.
 
 ### 1. Placement
-- Availability Domain: **AD 2** (or try AD 1/AD 3 if AD 2 is full)
+- Availability Domain: **Use the default** (if you get "Out of capacity", try a different one)
 - Capacity Type: **On-demand capacity** (NOT preemptible)
 - Leave fault domain and cluster placement as defaults
 

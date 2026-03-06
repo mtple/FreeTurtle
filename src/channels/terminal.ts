@@ -24,7 +24,7 @@ export class TerminalChannel implements Channel {
         this.processing = true;
         try {
           const response = await onMessage(text);
-          console.log(`\noperator> ${response}\n`);
+          console.log(`\nceo> ${response}\n`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
           console.log(`\n[error] ${msg}\n`);
@@ -46,7 +46,7 @@ export class TerminalChannel implements Channel {
   }
 
   async send(text: string): Promise<void> {
-    console.log(`\noperator> ${text}\n`);
+    console.log(`\nceo> ${text}\n`);
   }
 
   async stop(): Promise<void> {
