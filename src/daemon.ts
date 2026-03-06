@@ -11,6 +11,7 @@ import { Heartbeat } from "./heartbeat.js";
 import { TerminalChannel } from "./channels/terminal.js";
 import { TelegramChannel } from "./channels/telegram.js";
 import type { Channel } from "./channels/types.js";
+import { WebhookServer } from "./webhooks/server.js";
 import { createLogger, type Logger } from "./logger.js";
 
 export interface DaemonOptions {
@@ -26,6 +27,7 @@ export class FreeTurtleDaemon {
   private channels: Channel[] = [];
   private runner?: TaskRunner;
   private ipcServer?: net.Server;
+  private webhookServer?: WebhookServer;
 
   constructor(dir: string, options: DaemonOptions = {}) {
     this.dir = dir;
@@ -140,6 +142,27 @@ export class FreeTurtleDaemon {
       }
     }
 
+    // Start webhook server if enabled
+    if (env.WEBHOOK_ENABLED === "true" && env.NEYNAR_API_KEY && env.FARCASTER_FID) {
+      const webhookPort = parseInt(env.WEBHOOK_PORT || "3456", 10);
+      const watchedFids = env.WEBHOOK_WATCH_FIDS
+        ? env.WEBHOOK_WATCH_FIDS.split(",").map((f) => parseInt(f.trim(), 10))
+        : undefined;
+      this.webhookServer = new WebhookServer({
+        port: webhookPort,
+        ownFid: parseInt(env.FARCASTER_FID, 10),
+        neynarApiKey: env.NEYNAR_API_KEY,
+        webhookSecret: env.NEYNAR_WEBHOOK_SECRET,
+        watchedFids,
+        logger: this.logger,
+        onEvent: async (prompt) => {
+          return this.runner!.runMessage(prompt, "webhook");
+        },
+      });
+      await this.webhookServer.start();
+      this.logger.info(`Webhook server started on port ${webhookPort}`);
+    }
+
     // Write PID file
     const pidPath = join(this.dir, "daemon.pid");
     await writeFile(pidPath, String(process.pid), "utf-8");
@@ -164,6 +187,9 @@ export class FreeTurtleDaemon {
     const moduleNames = modules.map((m) => m.name).join(", ") || "none";
     const channelNames = this.channels.map((c) => c.name).join(", ") || "none";
     const cronCount = Object.keys(config.cron).length;
+    const webhookStatus = this.webhookServer
+      ? `port ${env.WEBHOOK_PORT || "3456"}`
+      : "off";
 
     console.log(`
     \x1b[38;2;94;255;164m  _____     ____\x1b[0m
@@ -177,6 +203,7 @@ export class FreeTurtleDaemon {
   Modules     ${moduleNames}
   Cron tasks  ${cronCount}
   Channels    ${channelNames}
+  Webhooks    ${webhookStatus}
 
   \x1b[2mfreeturtle send "message"  — talk to your CEO\x1b[0m
   \x1b[2mfreeturtle start --chat   — interactive mode\x1b[0m
@@ -191,6 +218,7 @@ export class FreeTurtleDaemon {
     for (const ch of this.channels) {
       await ch.stop();
     }
+    if (this.webhookServer) await this.webhookServer.stop();
     this.ipcServer?.close();
 
     // Remove PID file

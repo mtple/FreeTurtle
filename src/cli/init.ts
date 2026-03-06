@@ -7,6 +7,7 @@ import { LLMClient } from "../llm.js";
 import { connectFarcaster } from "./connect-farcaster.js";
 import { scanForSecrets, redactSecrets, condenseDocs } from "./intake.js";
 import { testTelegram, testGitHub, testDatabase, testOnchain } from "./connection-tests.js";
+import { createWebhook, channelToUrl, type WebhookSubscription } from "../webhooks/neynar.js";
 
 const TURTLE = `
         \x1b[38;2;94;255;164m_____\x1b[0m     \x1b[38;2;94;255;164m____\x1b[0m
@@ -195,6 +196,10 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: string;
     onchain: boolean;
     rpcUrl: string;
+    webhookEnabled: boolean;
+    webhookPort: string;
+    webhookSecret: string;
+    webhookWatchFids: string;
     businessContext: string;
     contracts: { name: string; address: string }[];
   }
@@ -219,6 +224,10 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: "",
     onchain: false,
     rpcUrl: "",
+    webhookEnabled: false,
+    webhookPort: "3456",
+    webhookSecret: "",
+    webhookWatchFids: "",
     contracts: [],
   };
 
@@ -345,7 +354,137 @@ export async function runInit(dir: string): Promise<void> {
       }
       return true;
     },
-    // 8. Telegram
+    // 8. Webhooks (only if Farcaster was connected)
+    async () => {
+      if (!state.farcaster) return true;
+
+      const enable = await p.confirm({
+        message: "Set up webhooks? (auto-respond to mentions, watch users/channels)",
+        initialValue: false,
+      });
+      if (p.isCancel(enable)) return false;
+      if (!enable) return true;
+
+      state.webhookEnabled = true;
+
+      // What to listen for
+      const listeners = await p.multiselect({
+        message: "What should your CEO listen for?",
+        options: [
+          { value: "mentions", label: "Mentions", hint: "someone @'s your CEO" },
+          { value: "replies", label: "Replies", hint: "someone replies to your CEO's casts" },
+          { value: "users", label: "Specific users", hint: "watch casts from certain accounts" },
+          { value: "channels", label: "Channels", hint: "watch new casts in Farcaster channels" },
+        ],
+        initialValues: ["mentions"],
+        required: true,
+      });
+      if (p.isCancel(listeners)) { state.webhookEnabled = false; return true; }
+
+      // Build subscription
+      const subscription: WebhookSubscription = {};
+      const ownFid = parseInt(state.fid, 10);
+
+      if (listeners.includes("mentions")) {
+        subscription.mentionedFids = [ownFid];
+      }
+      if (listeners.includes("replies")) {
+        subscription.parentAuthorFids = [ownFid];
+      }
+
+      if (listeners.includes("users")) {
+        const fidsInput = await p.text({
+          message: "FIDs to watch (comma-separated)",
+          placeholder: "e.g. 3, 12345, 99999",
+          validate: (v) => {
+            if (!v?.trim()) return "Required";
+            const fids = v.split(",").map((f) => f.trim());
+            if (fids.some((f) => isNaN(parseInt(f, 10)))) return "All values must be numbers";
+            return undefined;
+          },
+        });
+        if (p.isCancel(fidsInput)) { state.webhookEnabled = false; return true; }
+        const watchFids = fidsInput.split(",").map((f) => parseInt(f.trim(), 10));
+        subscription.authorFids = watchFids;
+        state.webhookWatchFids = watchFids.join(",");
+      }
+
+      if (listeners.includes("channels")) {
+        const channelsInput = await p.text({
+          message: "Channel names to watch (comma-separated, without /)",
+          placeholder: "e.g. farcaster, base, music",
+          validate: (v) => (v?.trim() ? undefined : "Required"),
+        });
+        if (p.isCancel(channelsInput)) { state.webhookEnabled = false; return true; }
+        subscription.channelUrls = channelsInput
+          .split(",")
+          .map((c) => channelToUrl(c.trim()));
+      }
+
+      const port = await p.text({
+        message: "Webhook server port",
+        placeholder: "3456",
+        defaultValue: "3456",
+        validate: (v) => {
+          const n = parseInt(v || "3456", 10);
+          if (isNaN(n) || n < 1 || n > 65535) return "Invalid port number";
+          return undefined;
+        },
+      });
+      if (p.isCancel(port)) { state.webhookEnabled = false; return true; }
+      state.webhookPort = port;
+
+      const url = await p.text({
+        message: "Your server's public webhook URL",
+        placeholder: `http://<YOUR_SERVER_IP>:${port}/webhook`,
+        validate: (v) => {
+          if (!v?.trim()) return "Required";
+          if (!v.includes("/webhook")) return "URL should end with /webhook";
+          return undefined;
+        },
+      });
+      if (p.isCancel(url)) { state.webhookEnabled = false; return true; }
+
+      const secret = await p.text({
+        message: "Webhook secret (optional, for signature verification)",
+        placeholder: "Leave blank to skip",
+      });
+      if (p.isCancel(secret)) { state.webhookEnabled = false; return true; }
+      if (secret?.trim()) state.webhookSecret = secret.trim();
+
+      // Register with Neynar
+      const s = p.spinner();
+      s.start("Registering webhook with Neynar");
+      try {
+        await createWebhook(
+          state.neynarKey,
+          `FreeTurtle (FID ${state.fid})`,
+          url,
+          subscription,
+        );
+        s.stop("Webhook registered with Neynar!");
+      } catch (err) {
+        s.stop("Failed to register webhook");
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        p.log.warn(`${msg} — you can set this up later with: freeturtle webhooks`);
+        state.webhookEnabled = false;
+      }
+
+      if (state.webhookEnabled) {
+        p.note(
+          [
+            "Make sure port " + state.webhookPort + " is open on your server:",
+            "",
+            "  Oracle: Networking > VCN > Subnet > Security List > Add Ingress Rule",
+            "  OS:     sudo iptables -I INPUT -p tcp --dport " + state.webhookPort + " -j ACCEPT",
+          ].join("\n"),
+          "Firewall reminder"
+        );
+      }
+
+      return true;
+    },
+    // 9. Telegram
     async () => {
       const enable = await p.confirm({
         message: "Connect Telegram? (chat with your CEO via bot)",
@@ -744,6 +883,12 @@ ${state.founderName}.
         if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
         if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
         if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);
+        if (state.webhookEnabled) {
+          envLines.push(`WEBHOOK_ENABLED=true`);
+          envLines.push(`WEBHOOK_PORT=${state.webhookPort}`);
+          if (state.webhookSecret) envLines.push(`NEYNAR_WEBHOOK_SECRET=${state.webhookSecret}`);
+          if (state.webhookWatchFids) envLines.push(`WEBHOOK_WATCH_FIDS=${state.webhookWatchFids}`);
+        }
         const envFilePath = join(dir, ".env");
         await writeFile(envFilePath, envLines.join("\n") + "\n", "utf-8");
         await chmod(envFilePath, 0o600);

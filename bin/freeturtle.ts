@@ -11,6 +11,7 @@ import { runSetup } from "../src/setup.js";
 import { connectFarcaster } from "../src/cli/connect-farcaster.js";
 import { runInstallService } from "../src/cli/install-service.js";
 import { runUpdate } from "../src/cli/update.js";
+import { runWebhooksSetup } from "../src/cli/webhooks.js";
 import {
   runApprove,
   runReject,
@@ -135,6 +136,14 @@ connect
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
     await connectFarcaster(opts.dir);
+  });
+
+program
+  .command("webhooks")
+  .description("Set up Neynar webhooks for Farcaster mentions")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    await runWebhooksSetup(opts.dir);
   });
 
 program.parse();
