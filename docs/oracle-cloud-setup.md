@@ -17,14 +17,14 @@ Do this first — the instance creation form's inline networking option does NOT
 ### 1. Create VCN
 1. Go to **Networking > Virtual Cloud Networks**
 2. Click **Create VCN**
-3. Name: `freeturtle-vcn`
+3. Name: whatever you want (e.g. `my-vcn`, `prod-network`)
 4. IPv4 CIDR block: `10.0.0.0/16`
 5. DNS hostnames: enabled
 6. Skip IPv6
 
 ### 2. Create Internet Gateway
 1. Inside your VCN, go to **Resources > Internet Gateways**
-2. Create Internet Gateway named `freeturtle-gateway`
+2. Create an Internet Gateway — name it anything (e.g. `my-gateway`, `internet-gw`)
 
 ### 3. Add Route Rule
 1. Go to **Resources > Route Tables > Default Route Table**
@@ -46,7 +46,7 @@ Get the OCIDs from the Route Table and Internet Gateway detail pages.
 
 ### 4. Create Public Subnet
 1. Inside your VCN, go to **Resources > Subnets > Create Subnet**
-2. Name: `freeturtle-public-subnet`
+2. Name: anything (e.g. `public-subnet`, `main-subnet`)
 3. Subnet Type: Regional
 4. CIDR: `10.0.0.0/24`
 5. Subnet Access: **Public Subnet**
