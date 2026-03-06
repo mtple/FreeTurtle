@@ -78,18 +78,19 @@ Go to **Compute > Instances > Create Instance**.
 ### 5. Networking
 1. Primary network: **Select existing virtual cloud network** > your VCN
 2. Subnet: **Select existing subnet** > your public subnet
-3. Private IPv4: Automatically assign
-4. **Public IPv4: Toggle ON**
+3. VNIC name: anything you want — just a label (e.g. `primary`, `main`)
+4. Private IPv4: Automatically assign
+5. **Public IPv4: Toggle ON**
 
-### 6. Boot Volume
-- Default 46.6 GB — fine as-is
-- In-transit encryption: enabled
-- Estimated cost may show ~$2/month — this is a display bug, actual cost is $0
-
-### 7. SSH Keys
+### 6. SSH Keys
 - Select **Generate a key pair for me**
 - **Download both private key and public key BEFORE creating the instance**
 - You cannot retrieve the private key later
+
+### 7. Boot Volume
+- Default 46.6 GB — fine as-is
+- In-transit encryption: enabled
+- Estimated cost may show ~$2/month — this is a display bug, actual cost is $0
 
 ### 8. Create
 If you get "Out of capacity":
