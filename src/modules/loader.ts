@@ -7,6 +7,7 @@ import { DatabaseModule } from "./database/index.js";
 import { GitHubModule } from "./github/index.js";
 import { OnchainModule } from "./onchain/index.js";
 import { XmtpModule } from "./xmtp/index.js";
+import { WorkspaceModule } from "./workspace/index.js";
 
 const MODULE_MAP: Record<string, new () => FreeTurtleModule> = {
   farcaster: FarcasterModule,
@@ -21,8 +22,21 @@ export async function loadModules(
   env: Record<string, string>,
   logger?: Logger,
   policy?: PolicyConfig,
+  dir?: string,
 ): Promise<FreeTurtleModule[]> {
   const modules: FreeTurtleModule[] = [];
+
+  // Workspace module is always loaded — gives the CEO file access to its own workspace
+  if (dir) {
+    try {
+      const workspace = new WorkspaceModule();
+      await workspace.initialize({ _workspaceDir: dir }, env, { policy });
+      modules.push(workspace);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      logger?.error(`Workspace module failed to initialize: ${msg}`);
+    }
+  }
 
   for (const [name, moduleConfig] of Object.entries(config.modules)) {
     if (!moduleConfig.enabled) continue;

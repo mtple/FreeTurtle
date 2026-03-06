@@ -144,10 +144,14 @@ export function assertOnchainScopeAllowed(
   }
 }
 
+/** Files that require founder approval to modify */
+const PROTECTED_WORKSPACE_FILES = ["soul.md", "config.md", ".env"];
+
 /**
  * Determines whether a tool call requires human approval before execution.
  * - delete_cast => always true
  * - commit_file => true if branch is in approval_required_branches (default ["main"])
+ * - write_file / edit_file => true if path is a protected file (soul.md, config.md, .env)
  * - everything else => false
  */
 export function requiresApproval(
@@ -163,6 +167,13 @@ export function requiresApproval(
       policy?.github?.approval_required_branches ?? ["main"];
     return approvalBranches.some(
       (b) => b.toLowerCase() === branch.toLowerCase(),
+    );
+  }
+
+  if (toolName === "write_file" || toolName === "edit_file") {
+    const path = (input.path as string) ?? "";
+    return PROTECTED_WORKSPACE_FILES.some(
+      (f) => path === f || path.endsWith(`/${f}`),
     );
   }
 

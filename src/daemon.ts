@@ -80,7 +80,7 @@ export class FreeTurtleDaemon {
     this.logger.info(`LLM: ${provider} / ${config.llm.model}`);
 
     // Load modules (pass policy for allowlist enforcement)
-    const modules = await loadModules(config, env, this.logger, config.policy);
+    const modules = await loadModules(config, env, this.logger, config.policy, this.dir);
     this.logger.info(
       `Modules: ${modules.map((m) => m.name).join(", ") || "none"}`
     );

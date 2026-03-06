@@ -237,7 +237,16 @@ export class TaskRunner {
       "- When you post, match the voice and style described in your identity.",
       "- Log important actions and observations.",
       "- If you are unsure about something, say so rather than guessing.",
-      `- The current date and time is: ${new Date().toISOString()}`
+      `- The current date and time is: ${new Date().toISOString()}`,
+      "",
+      "## Self-Modification",
+      "- You can read and modify your own files using read_file, write_file, edit_file, and list_files.",
+      "- Your identity is in soul.md — you can update your voice, goals, knowledge, and values.",
+      "- Your configuration is in config.md — you can change cron schedules, enable/disable modules and channels.",
+      "- Your memory is in workspace/memory/ — you can write persistent notes, logs, and data.",
+      "- Changes to soul.md, config.md, and .env require founder approval. Memory writes do not.",
+      "- When the founder asks you to change your behavior, update the relevant file so the change persists.",
+      "- Config changes (cron, modules, channels) take effect on next restart.",
     );
 
     return parts.join("\n");

@@ -16,7 +16,9 @@ The setup wizard walks you through everything: naming your AI CEO, connecting Fa
 
 FreeTurtle gives you an autonomous AI CEO that:
 
+- **Modifies itself** — updates its own identity, voice, goals, config, and memory when you ask
 - **Posts to Farcaster** on a schedule (or on demand)
+- **Listens for mentions** via webhooks and auto-replies
 - **Chats with you** via Terminal or Telegram
 - **Writes strategy briefs** weekly
 - **Queries databases** (read-only Postgres)
@@ -31,6 +33,7 @@ FreeTurtle is a Node.js daemon that mostly sleeps and wakes up when:
 1. A **cron timer** fires (e.g. "post to Farcaster every 8 hours")
 2. A **heartbeat** fires (e.g. "check if anything needs attention every 30 minutes")
 3. The **founder sends a message** via Terminal or Telegram
+4. A **webhook event** arrives (e.g. someone mentions the CEO on Farcaster)
 
 All three route to the same **task runner**, which:
 
@@ -44,40 +47,53 @@ All three route to the same **task runner**, which:
 8. Persists results to workspace files
 
 ```
-┌───────────────────────────────────────────────┐
-│                FreeTurtle Daemon               │
-│                                               │
-│  ┌──────────┐  ┌──────────┐  ┌─────────────┐ │
-│  │ Scheduler │  │ Channels │  │     IPC     │ │
-│  │  (cron)   │  │ Terminal │  │ send/approve│ │
-│  │           │  │ Telegram │  │   /reject   │ │
-│  └─────┬─────┘  └────┬─────┘  └──────┬──────┘ │
-│        │             │               │        │
-│        └──────┬──────┘───────────────┘        │
-│               ▼                               │
-│        ┌──────────────┐                       │
-│        │  Task Runner  │                      │
-│        │  soul + memory│                      │
-│        │  + LLM + tools│                      │
-│        └──────┬───────┘                       │
-│               ▼                               │
-│  ┌─────────────────────────────────────┐      │
-│  │      Policy ─► Approval ─► Retry   │      │
-│  │  allowlists   founder gate  backoff  │      │
-│  └──────────────────┬──────────────────┘      │
-│                     ▼                         │
-│  ┌─────────────────────────────────────┐      │
-│  │            Modules                  │      │
-│  │ Farcaster │ Database│ GitHub│Onchain│      │
-│  └─────────────────────────────────────┘      │
-│                     │                         │
-│               ┌─────▼─────┐                   │
-│               │ Audit Log │                   │
-│               └───────────┘                   │
-└───────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│                   FreeTurtle Daemon                    │
+│                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌───────┐ ┌──────────┐ │
+│  │ Scheduler │  │ Channels │  │  IPC  │ │ Webhooks │ │
+│  │  (cron)   │  │ Terminal │  │ send/ │ │ Farcaster│ │
+│  │           │  │ Telegram │  │approve│ │ mentions │ │
+│  └─────┬─────┘  └────┬─────┘  └───┬───┘ └────┬─────┘ │
+│        │             │            │           │      │
+│        └──────┬──────┘────────────┘───────────┘      │
+│               ▼                                      │
+│        ┌──────────────┐                              │
+│        │  Task Runner  │                             │
+│        │  soul + memory│                             │
+│        │  + LLM + tools│                             │
+│        └──────┬───────┘                              │
+│               ▼                                      │
+│  ┌─────────────────────────────────────┐             │
+│  │      Policy ─► Approval ─► Retry   │             │
+│  │  allowlists   founder gate  backoff  │             │
+│  └──────────────────┬──────────────────┘             │
+│                     ▼                                │
+│  ┌───────────────────────────────────────────────┐   │
+│  │                  Modules                       │   │
+│  │ Workspace│Farcaster│Database│ GitHub │ Onchain │   │
+│  └───────────────────────────────────────────────┘   │
+│                     │                                │
+│               ┌─────▼─────┐                          │
+│               │ Audit Log │                          │
+│               └───────────┘                          │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## Modules
+
+### Workspace (always loaded)
+
+Read and write files in the CEO's own workspace. This is how the CEO modifies itself — updating its identity, voice, goals, config, memory, and notes.
+
+| Tool | Description |
+|------|-------------|
+| `read_file` | Read any file in the workspace |
+| `write_file` | Write or overwrite a file (soul.md/config.md/.env require approval) |
+| `edit_file` | Find-and-replace within a file (soul.md/config.md/.env require approval) |
+| `list_files` | List files and directories |
+
+All paths are sandboxed to `~/.freeturtle/` — the CEO cannot escape its workspace.
 
 ### Farcaster
 
@@ -92,6 +108,20 @@ Post and read casts via the Neynar API.
 | `delete_cast` | Delete a cast (requires founder approval) |
 
 **Env:** `NEYNAR_API_KEY`, `FARCASTER_SIGNER_UUID`, `FARCASTER_FID`
+
+#### Webhooks
+
+FreeTurtle can listen for Farcaster events in real-time via Neynar webhooks. Set up during `freeturtle init` or later with `freeturtle webhooks`.
+
+Supported event types:
+- **Mentions** — someone @'s your CEO
+- **Replies** — someone replies to your CEO's casts
+- **Specific users** — watch casts from certain accounts
+- **Channels** — watch new casts in Farcaster channels
+
+The daemon runs a built-in HTTP server that receives webhook events, filters spam (Neynar user score), rate-limits per user, deduplicates, and routes events through the CEO.
+
+**Env:** `WEBHOOK_ENABLED`, `WEBHOOK_PORT`, `NEYNAR_WEBHOOK_SECRET` (optional), `WEBHOOK_WATCH_FIDS` (optional)
 
 ### Database
 
@@ -216,6 +246,7 @@ freeturtle status            # Show daemon status
 freeturtle send "message"    # Send a message to the running CEO
 freeturtle setup             # Reconfigure LLM provider
 freeturtle connect farcaster # Set up Farcaster signer
+freeturtle webhooks          # Set up Neynar webhooks (mentions, replies, watched users/channels)
 freeturtle approvals         # List pending approval requests
 freeturtle approve <id>      # Approve a pending action
 freeturtle reject <id>       # Reject a pending action
@@ -284,6 +315,7 @@ Some actions require founder approval before execution:
 
 - `delete_cast` — always requires approval
 - `commit_file` to a protected branch (default: `main`) — requires approval
+- `write_file` / `edit_file` to `soul.md`, `config.md`, or `.env` — requires approval
 
 When approval is needed, FreeTurtle notifies you via Telegram/terminal with the approval ID. You can then:
 
@@ -314,12 +346,15 @@ All external API calls (Neynar, GitHub, Postgres, BaseScan, RPC) are wrapped wit
 FreeTurtle is designed to be safe to run locally:
 
 - **No shell execution** — the CEO cannot run arbitrary commands
+- **Sandboxed workspace** — file access is restricted to `~/.freeturtle/`, path traversal is blocked
+- **Protected self-modification** — changes to soul.md, config.md, and .env require founder approval
 - **Closed tool set** — only the tools defined by enabled modules are available
 - **Policy allowlists** — per-module restrictions on repos, paths, channels, contracts
 - **Founder approval** — destructive actions require explicit approval before execution
 - **Read-only database** — all SQL runs in read-only transactions
 - **Read-only onchain** — no wallet, no signing, no transactions
 - **Founder-only chat** — Telegram only responds to the configured founder ID
+- **Webhook spam filtering** — Neynar user score, per-user rate limiting, duplicate detection
 - **Audit trail** — every tool call is logged with redacted inputs
 
 ## Security Best Practices
@@ -356,6 +391,20 @@ Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it 
 ### Cloud Provider Access
 
 Your cloud provider (Oracle, AWS, GCP) has full access to the underlying infrastructure — they can technically read any file on your VM. This is true of all cloud computing and is covered by their terms of service. For most use cases this is fine. If this is unacceptable for your threat model, run FreeTurtle on hardware you physically control.
+
+## Self-Modification
+
+FreeTurtle CEOs can modify their own behavior at runtime. Everything that defines the CEO — identity, voice, goals, config, memory — is a file in the workspace, and the CEO has tools to read and write those files.
+
+Examples of what you can tell your CEO:
+
+- **"Be more direct and honest"** → CEO edits the Voice section of `soul.md` (requires your approval)
+- **"Remember that @rish posts interesting stuff"** → CEO writes a note to `workspace/memory/notes.md`
+- **"Change posting to every 4 hours"** → CEO edits the cron schedule in `config.md` (requires approval, takes effect on restart)
+- **"Add a goal about growing the Discord"** → CEO edits the Goals section of `soul.md` (requires approval)
+- **"Write a brief on this week's engagement"** → CEO writes to `workspace/strategy/`
+
+Changes to core files (`soul.md`, `config.md`, `.env`) always require founder approval. Memory and notes writes go through freely.
 
 ## The Two-Turtle Vision (v0.2)
 
