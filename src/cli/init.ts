@@ -2,7 +2,7 @@ import * as p from "@clack/prompts";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { runSetup } from "../setup.js";
+import { runSetup, type SetupResult } from "../setup.js";
 import { LLMClient } from "../llm.js";
 import { connectFarcaster } from "./connect-farcaster.js";
 import { scanForSecrets, redactSecrets, condenseDocs } from "./intake.js";
@@ -16,7 +16,7 @@ const TURTLE = `
       \x1b[38;2;94;255;164m|_________/\x1b[0m
       \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m
 
-      \x1b[1mFreeTurtle\x1b[0m  \x1b[2mv0.1\x1b[0m
+      \x1b[1mFreeTurtle\x1b[0m  \x1b[2mv0.1.12\x1b[0m
 `;
 
 const HATCH_FRAMES = [
@@ -171,6 +171,8 @@ export async function runInit(dir: string): Promise<void> {
       "",
       "It'll only take a few minutes. You can always change",
       "settings later in ~/.freeturtle/",
+      "",
+      "Ctrl+C to go back a step. Ctrl+C on the first step to exit.",
     ].join("\n"),
     "🥚 Welcome"
   );
@@ -201,6 +203,7 @@ export async function runInit(dir: string): Promise<void> {
     webhookSecret: string;
     webhookWatchFids: string;
     businessContext: string;
+    setupResult: SetupResult | null;
     contracts: { name: string; address: string }[];
   }
 
@@ -228,6 +231,7 @@ export async function runInit(dir: string): Promise<void> {
     webhookPort: "3456",
     webhookSecret: "",
     webhookWatchFids: "",
+    setupResult: null,
     contracts: [],
   };
 
@@ -257,15 +261,19 @@ export async function runInit(dir: string): Promise<void> {
     },
     // 3. Business context (optional, multiline-safe)
     async () => {
-      // Skip if we already captured context from a paste burst
       if (state.businessContext) {
-        p.log.info(`Using ${(state.businessContext.length / 1000).toFixed(0)}K chars of business context you pasted earlier.`);
-        return true;
+        const keep = await p.confirm({
+          message: `Keep existing business context? (${(state.businessContext.length / 1000).toFixed(0)}K chars)`,
+          initialValue: true,
+        });
+        if (p.isCancel(keep)) return false;
+        if (keep) return true;
+        state.businessContext = "";
       }
 
       const wantContext = await p.confirm({
         message: "Want to dump docs about your business? (pitch deck, readme, strategy notes, etc.)",
-        initialValue: false,
+        initialValue: true,
       });
       if (p.isCancel(wantContext)) return false;
       if (!wantContext) return true;
@@ -296,7 +304,21 @@ export async function runInit(dir: string): Promise<void> {
       }
       return true;
     },
-    // 4. CEO name
+    // 4. LLM setup
+    async () => {
+      if (state.setupResult) {
+        const keep = await p.confirm({
+          message: `Keep current LLM? (${state.setupResult.provider} / ${state.setupResult.model})`,
+          initialValue: true,
+        });
+        if (p.isCancel(keep)) return false;
+        if (keep) return true;
+      }
+      p.log.step("Let's pick a brain for your CEO.");
+      state.setupResult = await runSetup(dir);
+      return true;
+    },
+    // 5. CEO name
     async () => {
       const result = await pasteAwareText(state, {
         message: "What should your AI CEO be called?",
@@ -358,11 +380,36 @@ export async function runInit(dir: string): Promise<void> {
     async () => {
       if (!state.farcaster) return true;
 
+      p.note(
+        [
+          "Webhooks let your CEO auto-respond to Farcaster events",
+          "(mentions, replies, specific users, channels).",
+          "",
+          "How it works:",
+          "  1. You pick what to listen for",
+          "  2. FreeTurtle runs a webhook server on your machine",
+          "  3. Neynar sends matching events to your server",
+          "",
+          "You'll need:",
+          "  - Your server's public IP address",
+          "    Find it: run `curl ifconfig.me` on your server",
+          "    Or: Oracle Cloud Console > Compute > Instances > Public IP",
+          "",
+          "  - Port 3456 open in BOTH firewalls (if on Oracle Cloud):",
+          "    1. Oracle Cloud Console: Networking > VCN > Subnet >",
+          "       Security List > Add Ingress Rule (TCP port 3456)",
+          "    2. On the server: sudo iptables -I INPUT -p tcp --dport 3456 -j ACCEPT",
+          "",
+          "Your webhook URL will be: http://<YOUR_PUBLIC_IP>:3456/webhook",
+        ].join("\n"),
+        "Webhooks"
+      );
+
       const enable = await p.confirm({
-        message: "Set up webhooks? (auto-respond to mentions, watch users/channels)",
+        message: "Set up webhooks?",
         initialValue: false,
       });
-      if (p.isCancel(enable)) return false;
+      if (p.isCancel(enable)) return true;
       if (!enable) return true;
 
       state.webhookEnabled = true;
@@ -434,9 +481,23 @@ export async function runInit(dir: string): Promise<void> {
       if (p.isCancel(port)) { state.webhookEnabled = false; return true; }
       state.webhookPort = port;
 
+      p.note(
+        [
+          "Neynar needs a public URL to send events to.",
+          "This is your server's public IP + the port you chose + /webhook",
+          "",
+          "To find your public IP:",
+          "  Oracle Cloud Console: Compute > Instances > Public IP Address",
+          "  From the server:     curl ifconfig.me",
+          "",
+          `Example: http://<YOUR_PUBLIC_IP>:${port}/webhook`,
+        ].join("\n"),
+        "Webhook URL"
+      );
+
       const url = await p.text({
         message: "Your server's public webhook URL",
-        placeholder: `http://<YOUR_SERVER_IP>:${port}/webhook`,
+        placeholder: `http://<YOUR_PUBLIC_IP>:${port}/webhook`,
         validate: (v) => {
           if (!v?.trim()) return "Required";
           if (!v.includes("/webhook")) return "URL should end with /webhook";
@@ -473,10 +534,11 @@ export async function runInit(dir: string): Promise<void> {
       if (state.webhookEnabled) {
         p.note(
           [
-            "Make sure port " + state.webhookPort + " is open on your server:",
+            "Make sure port " + state.webhookPort + " is open in BOTH firewalls (if on Oracle Cloud):",
             "",
-            "  Oracle: Networking > VCN > Subnet > Security List > Add Ingress Rule",
-            "  OS:     sudo iptables -I INPUT -p tcp --dport " + state.webhookPort + " -j ACCEPT",
+            "  1. Oracle Cloud Console: Networking > VCN > Subnet >",
+            "     Security List > Add Ingress Rule (TCP port " + state.webhookPort + ")",
+            "  2. On the server: sudo iptables -I INPUT -p tcp --dport " + state.webhookPort + " -j ACCEPT",
           ].join("\n"),
           "Firewall reminder"
         );
@@ -529,11 +591,15 @@ export async function runInit(dir: string): Promise<void> {
       if (enable) {
         p.note(
           [
-            "1. Go to github.com/settings/tokens",
-            "2. Generate new token \u2192 Fine-grained token",
-            "3. Select the repos your CEO should access",
-            "4. Grant permissions: Issues (read/write), Contents (read/write)",
-            "5. Copy the token \u2014 you won't see it again",
+            "We recommend creating a separate GitHub account for your",
+            "CEO so its commits and issues come from its own identity.",
+            "",
+            "To generate a token (from the CEO's account or yours):",
+            "  1. Go to github.com/settings/tokens",
+            "  2. Generate new token \u2192 Fine-grained token",
+            "  3. Select the repos your CEO should access",
+            "  4. Grant permissions: Issues (read/write), Contents (read/write)",
+            "  5. Copy the token \u2014 you won't see it again",
           ].join("\n"),
           "GitHub setup"
         );
@@ -658,20 +724,22 @@ export async function runInit(dir: string): Promise<void> {
     },
   ];
 
-  // Run steps — Ctrl+C exits immediately
-  for (let i = 0; i < steps.length; i++) {
+  // Run steps — Ctrl+C goes back, Ctrl+C on first step exits
+  for (let i = 0; i < steps.length;) {
     const ok = await steps[i]();
-    if (!ok) {
+    if (ok) {
+      i++;
+    } else if (i === 0) {
       p.cancel("Setup cancelled.");
       process.exit(0);
+    } else {
+      p.log.info("Going back...");
+      i--;
     }
   }
 
-  // --- LLM setup ---
-  p.log.step("Let's pick a brain for your CEO.");
-  const setupResult = await runSetup(dir);
-
   // --- Condense business context into soul if provided ---
+  const setupResult = state.setupResult!;
   let soulContent: string | undefined;
   if (state.businessContext) {
     const llm = new LLMClient({
@@ -823,7 +891,7 @@ ${state.founderName}.
           "# FreeTurtle Config\n",
           "## LLM",
           "- provider: claude_api",
-          "- model: claude-sonnet-4-5-20250514",
+          "- model: claude-sonnet-4-5",
           "- max_tokens: 4096",
           "- api_key_env: ANTHROPIC_API_KEY",
           "",
@@ -923,16 +991,19 @@ ${state.founderName}.
     p.log.info(`Connected: ${modules.join(", ")}`);
   }
 
-  console.log(`
-  ${state.ceoName} is ready. 🐢
+  p.note(
+    [
+      "Config:   ~/.freeturtle/config.md",
+      "Soul:     ~/.freeturtle/soul.md",
+      "",
+      "Start:    freeturtle start",
+      "Chat:     freeturtle start --chat",
+      "Status:   freeturtle status",
+    ].join("\n"),
+    `${state.ceoName} is ready`
+  );
 
-  Start:    freeturtle start
-  Chat:     freeturtle start --chat
-  Status:   freeturtle status
-
-  Config:   ~/.freeturtle/config.md
-  Soul:     ~/.freeturtle/soul.md
-  `);
+  p.log.info("Run `freeturtle start` to bring your CEO online.");
 
   p.outro(`Go get 'em, ${state.ceoName}!`);
 }

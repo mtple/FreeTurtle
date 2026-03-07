@@ -102,13 +102,12 @@ export async function connectFarcaster(dir: string): Promise<{
     [
       "You'll need:",
       "",
-      "  1. Your Neynar API key (sign up at dev.neynar.com)",
+      "  1. A Neynar API key",
+      "     Sign up at dev.neynar.com if you don't have one.",
+      "",
       "  2. The recovery phrase for the Farcaster account",
       "     you want to post from",
       "     Farcaster app → Settings → Advanced → Recovery phrase",
-      "",
-      "The recovery phrase is used locally to authorize the signer.",
-      "It is never sent to any server.",
       "",
       "After setup, a QR code will appear in your terminal.",
       "Scan it with the Farcaster app to approve.",
@@ -127,7 +126,7 @@ export async function connectFarcaster(dir: string): Promise<{
       apiKey = existingEnv.NEYNAR_API_KEY;
     } else {
       const result = await p.text({
-        message: "Neynar API key",
+        message: "Neynar API key (from dev.neynar.com)",
         validate: (v) => (v?.trim() ? undefined : "Required"),
       });
       if (p.isCancel(result)) { p.cancel("Cancelled."); return null; }
@@ -135,12 +134,16 @@ export async function connectFarcaster(dir: string): Promise<{
     }
   } else {
     const result = await p.text({
-      message: "Neynar API key",
+      message: "Neynar API key (from dev.neynar.com)",
       validate: (v) => (v?.trim() ? undefined : "Required"),
     });
     if (p.isCancel(result)) { p.cancel("Cancelled."); return null; }
     apiKey = result;
   }
+
+  p.log.info("Your recovery phrase is only used locally to authorize the signer.");
+  p.log.info("It is never sent to any server, never saved to disk, and is");
+  p.log.info("discarded from memory as soon as the signer is approved.");
 
   const mnemonic = await p.text({
     message: "Farcaster recovery phrase (12 words, space-separated)",
@@ -257,6 +260,7 @@ export async function connectFarcaster(dir: string): Promise<{
     return null;
   }
   s.stop("Signer approved!");
+  p.log.info("Recovery phrase discarded from memory — it was never saved.");
 
   const approvedFid = String(approved.fid ?? fid);
 

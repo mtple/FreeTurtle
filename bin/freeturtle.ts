@@ -1,22 +1,17 @@
 #!/usr/bin/env node
 
+// Suppress Node.js deprecation warnings from dependencies (e.g. punycode in @farcaster/hub-nodejs)
+const origEmit = process.emit.bind(process) as typeof process.emit;
+process.emit = ((event: string, ...args: unknown[]): boolean => {
+  if (event === "warning" && args[0] instanceof Error && args[0].name === "DeprecationWarning") {
+    return false;
+  }
+  return origEmit(event, ...args);
+}) as typeof process.emit;
+
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
-import { runInit } from "../src/cli/init.js";
-import { runStart } from "../src/cli/start.js";
-import { runStatus } from "../src/cli/status.js";
-import { runSend } from "../src/cli/send.js";
-import { runSetup } from "../src/setup.js";
-import { connectFarcaster } from "../src/cli/connect-farcaster.js";
-import { runInstallService } from "../src/cli/install-service.js";
-import { runUpdate } from "../src/cli/update.js";
-import { runWebhooksSetup } from "../src/cli/webhooks.js";
-import {
-  runApprove,
-  runReject,
-  runListApprovals,
-} from "../src/cli/approvals.js";
 
 const DEFAULT_DIR = join(homedir(), ".freeturtle");
 
@@ -27,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.0");
+  .version("0.1.12");
 
 program
   .command("hello")
@@ -35,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.12");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
@@ -45,6 +40,7 @@ program
   .description("Set up a new AI CEO")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
+    const { runInit } = await import("../src/cli/init.js");
     await runInit(opts.dir);
   });
 
@@ -53,6 +49,7 @@ program
   .description("Configure your LLM provider and API key")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
+    const { runSetup } = await import("../src/setup.js");
     await runSetup(opts.dir);
   });
 
@@ -62,6 +59,7 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .option("--chat", "Open interactive terminal chat", false)
   .action(async (opts) => {
+    const { runStart } = await import("../src/cli/start.js");
     await runStart(opts.dir, { chat: opts.chat });
   });
 
@@ -71,6 +69,7 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
     try {
+      const { runStatus } = await import("../src/cli/status.js");
       await runStatus(opts.dir);
     } catch (err) {
       if (err instanceof Error) console.error(err.message);
@@ -83,6 +82,7 @@ program
   .description("Send a message to the running CEO")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (message, opts) => {
+    const { runSend } = await import("../src/cli/send.js");
     await runSend(opts.dir, message);
   });
 
@@ -90,6 +90,7 @@ program
   .command("update")
   .description("Update FreeTurtle to the latest version")
   .action(async () => {
+    const { runUpdate } = await import("../src/cli/update.js");
     await runUpdate();
   });
 
@@ -98,6 +99,7 @@ program
   .description("Install FreeTurtle as a systemd user service (Linux)")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
+    const { runInstallService } = await import("../src/cli/install-service.js");
     await runInstallService(opts.dir);
   });
 
@@ -106,6 +108,7 @@ program
   .description("Approve a pending action")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (id, opts) => {
+    const { runApprove } = await import("../src/cli/approvals.js");
     await runApprove(opts.dir, id);
   });
 
@@ -115,6 +118,7 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .option("--reason <reason>", "Rejection reason")
   .action(async (id, opts) => {
+    const { runReject } = await import("../src/cli/approvals.js");
     await runReject(opts.dir, id, opts.reason);
   });
 
@@ -123,6 +127,7 @@ program
   .description("List pending approval requests")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
+    const { runListApprovals } = await import("../src/cli/approvals.js");
     await runListApprovals(opts.dir);
   });
 
@@ -135,6 +140,7 @@ connect
   .description("Set up Farcaster signer with QR code approval")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
+    const { connectFarcaster } = await import("../src/cli/connect-farcaster.js");
     await connectFarcaster(opts.dir);
   });
 
@@ -143,6 +149,7 @@ program
   .description("Set up Neynar webhooks for Farcaster mentions")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
+    const { runWebhooksSetup } = await import("../src/cli/webhooks.js");
     await runWebhooksSetup(opts.dir);
   });
 

@@ -32,6 +32,7 @@ export class LLMClient {
   private mode: LLMProvider;
   private anthropic?: Anthropic;
   private openai?: OpenAI;
+  private anthropicClaudeCodeOAuth = false;
 
   constructor(options: LLMClientOptions) {
     this.mode = options.provider;
@@ -53,10 +54,31 @@ export class LLMClient {
       if (!options.oauthToken) {
         throw new Error("LLMClient missing required credential: oauthToken");
       }
-      this.anthropic = new Anthropic({
-        authToken: options.oauthToken,
-        baseURL: options.baseUrl,
-      });
+      const isOAuthToken = options.oauthToken.includes("sk-ant-oat");
+      this.anthropicClaudeCodeOAuth = isOAuthToken;
+
+      if (isOAuthToken) {
+        // Match OpenClaw/pi-ai OAuth transport for Claude subscription tokens.
+        this.anthropic = new Anthropic({
+          authToken: options.oauthToken,
+          baseURL: options.baseUrl,
+          dangerouslyAllowBrowser: true,
+          defaultHeaders: {
+            accept: "application/json",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "anthropic-beta":
+              "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14",
+            "user-agent": "claude-cli/2.1.62",
+            "x-app": "cli",
+          },
+        });
+      } else {
+        // Setup-tokens can be passed as apiKey-style credentials.
+        this.anthropic = new Anthropic({
+          apiKey: options.oauthToken,
+          baseURL: options.baseUrl,
+        });
+      }
       return;
     }
 
@@ -141,10 +163,17 @@ export class LLMClient {
     messages: Anthropic.MessageParam[],
     tools?: ToolDefinition[]
   ): Promise<LLMResponse> {
+    const effectiveSystemPrompt = this.anthropicClaudeCodeOAuth
+      ? [
+          "You are Claude Code, Anthropic's official CLI for Claude.",
+          systemPrompt,
+        ].join("\n\n")
+      : systemPrompt;
+
     const response = await this.anthropic!.messages.create({
       model: this.model,
       max_tokens: 4096,
-      system: systemPrompt,
+      system: effectiveSystemPrompt,
       messages,
       ...(tools?.length
         ? {

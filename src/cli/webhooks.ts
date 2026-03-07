@@ -96,14 +96,29 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
   // Create a new webhook
   p.note(
     [
-      "FreeTurtle's daemon runs a webhook server that listens for",
-      "Farcaster events. You choose what to listen for, provide",
-      "your server's public URL, and Neynar sends events there.",
+      "Webhooks let your CEO auto-respond to Farcaster events",
+      "(mentions, replies, specific users, channels).",
       "",
-      "The webhook server runs on a port you choose (default: 3456).",
-      "Make sure the port is open in your firewall.",
+      "How it works:",
+      "  1. You pick what to listen for",
+      "  2. FreeTurtle runs a webhook server on your machine",
+      "  3. Neynar sends matching events to your server",
+      "",
+      "You'll need:",
+      "  - Your server's public IP address",
+      "    Find it: run `curl ifconfig.me` on your server",
+      "    Or: Oracle Cloud Console > Compute > Instances > Public IP",
+      "",
+      "  - Port 3456 open in BOTH firewalls (if on Oracle Cloud):",
+      "    1. Oracle Cloud Console: Networking > VCN > Subnet >",
+      "       Security List > Add Ingress Rule (TCP port 3456)",
+      "    2. On the server: sudo iptables -I INPUT -p tcp --dport 3456 -j ACCEPT",
+      "",
+      "Your webhook URL will be: http://<YOUR_PUBLIC_IP>:3456/webhook",
+      "",
+      "Ctrl+C at any prompt to cancel.",
     ].join("\n"),
-    "How it works"
+    "Webhooks"
   );
 
   // What to listen for
@@ -173,9 +188,23 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
   });
   if (p.isCancel(port)) { p.cancel("Cancelled."); return; }
 
+  p.note(
+    [
+      "Neynar needs a public URL to send events to.",
+      "This is your server's public IP + the port you chose + /webhook",
+      "",
+      "To find your public IP:",
+      "  Oracle Cloud Console: Compute > Instances > Public IP Address",
+      "  From the server:     curl ifconfig.me",
+      "",
+      `Example: http://<YOUR_PUBLIC_IP>:${port}/webhook`,
+    ].join("\n"),
+    "Webhook URL"
+  );
+
   const url = await p.text({
     message: "Your server's public webhook URL",
-    placeholder: `http://<YOUR_SERVER_IP>:${port}/webhook`,
+    placeholder: `http://<YOUR_PUBLIC_IP>:${port}/webhook`,
     validate: (v) => {
       if (!v?.trim()) return "Required";
       if (!v.includes("/webhook")) return "URL should end with /webhook";
@@ -244,10 +273,11 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
 
   p.note(
     [
-      "Make sure port " + port + " is open:",
+      "Make sure port " + port + " is open in BOTH firewalls (if on Oracle Cloud):",
       "",
-      "  Oracle Cloud: Networking > VCN > Subnet > Security List > Add Ingress Rule",
-      "  OS firewall:  sudo iptables -I INPUT -p tcp --dport " + port + " -j ACCEPT",
+      "  1. Oracle Cloud Console: Networking > VCN > Subnet >",
+      "     Security List > Add Ingress Rule (TCP port " + port + ")",
+      "  2. On the server: sudo iptables -I INPUT -p tcp --dport " + port + " -j ACCEPT",
       "",
       "Then restart FreeTurtle:",
       "",

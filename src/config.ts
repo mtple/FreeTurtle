@@ -53,7 +53,7 @@ function parseConfig(raw: string): FreeTurtleConfig {
   const policyRaw: Record<string, Record<string, string | boolean>> = {};
 
   const config: FreeTurtleConfig = {
-    llm: { provider: "claude_api", model: "claude-sonnet-4-5-20250514", max_tokens: 4096 },
+    llm: { provider: "claude_api", model: "claude-sonnet-4-5", max_tokens: 4096 },
     cron: {},
     channels: {},
     modules: {},

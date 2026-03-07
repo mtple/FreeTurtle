@@ -1,4 +1,4 @@
-import { writeFile, unlink } from "node:fs/promises";
+import { readFile, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import net from "node:net";
 import { config as loadDotenv } from "dotenv";
@@ -13,6 +13,7 @@ import { TelegramChannel } from "./channels/telegram.js";
 import type { Channel } from "./channels/types.js";
 import { WebhookServer } from "./webhooks/server.js";
 import { createLogger, type Logger } from "./logger.js";
+import { refreshOpenAIAccessToken } from "./oauth/openai.js";
 
 export interface DaemonOptions {
   chat?: boolean;
@@ -60,6 +61,12 @@ export class FreeTurtleDaemon {
       openai_subscription: "OPENAI_OAUTH_TOKEN",
       openrouter: "OPENROUTER_API_KEY",
     };
+
+    // Refresh OpenAI OAuth access token when needed before creating the LLM client.
+    if (provider === "openai_subscription") {
+      const openaiTokenEnv = credEnvName ?? FALLBACK_ENV[provider];
+      await this.maybeRefreshOpenAIOAuthToken(env, openaiTokenEnv);
+    }
 
     const credential =
       (credEnvName ? env[credEnvName] : undefined) ??
@@ -331,4 +338,91 @@ export class FreeTurtleDaemon {
 
     return `Unknown command: ${command}`;
   }
+
+  private async maybeRefreshOpenAIOAuthToken(
+    env: Record<string, string>,
+    tokenEnvName: string
+  ): Promise<void> {
+    const currentToken = env[tokenEnvName];
+    const refreshToken = env.OPENAI_OAUTH_REFRESH_TOKEN;
+    const expiresAtRaw = env.OPENAI_OAUTH_EXPIRES_AT;
+    const now = Math.floor(Date.now() / 1000);
+    const refreshWindowSec = 5 * 60;
+
+    const expiresAt =
+      expiresAtRaw && /^\d+$/.test(expiresAtRaw)
+        ? parseInt(expiresAtRaw, 10)
+        : null;
+    const needsRefresh =
+      !currentToken ||
+      (typeof expiresAt === "number" && expiresAt - now <= refreshWindowSec);
+
+    if (!needsRefresh) return;
+    if (!refreshToken) {
+      if (!currentToken) {
+        this.logger.warn(
+          "OpenAI subscription token missing and OPENAI_OAUTH_REFRESH_TOKEN is not set."
+        );
+      }
+      return;
+    }
+
+    this.logger.info("Refreshing OpenAI OAuth access token");
+    const refreshed = await refreshOpenAIAccessToken(refreshToken);
+
+    env[tokenEnvName] = refreshed.accessToken;
+    if (refreshed.refreshToken) {
+      env.OPENAI_OAUTH_REFRESH_TOKEN = refreshed.refreshToken;
+    }
+    if (typeof refreshed.expiresAt === "number") {
+      env.OPENAI_OAUTH_EXPIRES_AT = String(refreshed.expiresAt);
+    }
+
+    await this.persistEnvVars({
+      [tokenEnvName]: env[tokenEnvName],
+      ...(env.OPENAI_OAUTH_REFRESH_TOKEN
+        ? { OPENAI_OAUTH_REFRESH_TOKEN: env.OPENAI_OAUTH_REFRESH_TOKEN }
+        : {}),
+      ...(env.OPENAI_OAUTH_EXPIRES_AT
+        ? { OPENAI_OAUTH_EXPIRES_AT: env.OPENAI_OAUTH_EXPIRES_AT }
+        : {}),
+    });
+  }
+
+  private async persistEnvVars(vars: Record<string, string>): Promise<void> {
+    const envPath = join(this.dir, ".env");
+    let existing = "";
+    try {
+      existing = await readFile(envPath, "utf-8");
+    } catch {
+      // no existing .env
+    }
+    await writeFile(envPath, mergeEnv(existing, vars), "utf-8");
+  }
+}
+
+function mergeEnv(
+  existing: string,
+  vars: Record<string, string>
+): string {
+  const lines = existing ? existing.split("\n") : [];
+  const remaining = { ...vars };
+
+  const updated = lines.map((line) => {
+    const match = line.match(/^([A-Z_][A-Z0-9_]*)=/);
+    if (match && match[1] in remaining) {
+      const key = match[1];
+      const val = remaining[key];
+      delete remaining[key];
+      return `${key}=${val}`;
+    }
+    return line;
+  });
+
+  for (const [key, val] of Object.entries(remaining)) {
+    updated.push(`${key}=${val}`);
+  }
+
+  const result = updated.join("\n");
+  return result.endsWith("\n") ? result : result + "\n";
 }
