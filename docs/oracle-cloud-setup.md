@@ -1,6 +1,6 @@
 # Oracle Cloud Free Tier — Server Setup Guide
 
-FreeTurtle runs great on Oracle Cloud's free ARM instance: 4 CPUs, 24 GB RAM, always free.
+FreeTurtle runs great on Oracle Cloud's free ARM instance: 2 CPUs, 12 GB RAM, always free.
 
 > **Tip:** If you're not comfortable with cloud setup, paste this entire guide into ChatGPT, Claude, or any AI chat and ask it to walk you through step by step. It can answer questions as you go — screenshots help too.
 
@@ -69,8 +69,8 @@ Go to **Compute > Instances > Create Instance**.
 ### 3. Shape
 - Click the **Ampere** tab
 - Shape: **VM.Standard.A1.Flex** (ARM)
-- OCPUs: **4**
-- Memory: **24 GB**
+- OCPUs: **2**
+- Memory: **12 GB**
 - This is the free tier ARM shape. Do NOT select VM.Standard.E2.1.Micro (1 CPU / 1 GB RAM — too small)
 
 ### 4. Security
@@ -97,8 +97,8 @@ Go to **Compute > Instances > Create Instance**.
 ### 8. Create
 If you get "Out of capacity":
 - Try a different Availability Domain
-- Try reducing to 2 OCPUs / 12 GB RAM
 - Make sure your account is upgraded to Pay-As-You-Go
+- Try again later — ARM capacity fluctuates
 
 ## Server Setup
 
@@ -295,4 +295,4 @@ SSH (port 22) is open by default.
 - Oracle may send warnings about idle free tier instances — upgrading to PAYG prevents most issues
 - Treat the server as disposable — keep your `~/.freeturtle/` config backed up or in git
 - If the instance is lost, a full rebuild takes ~15 minutes on any new server
-- The ARM instance is always free as long as you stay within the free tier limits (4 OCPUs / 24 GB total across all A1 instances)
+- The ARM instance is always free as long as you stay within the free tier limits (4 OCPUs / 24 GB total across all A1 instances — using 2/12 leaves room for a second instance if needed)

@@ -2,15 +2,58 @@
 
 An open-source framework for deploying autonomous AI CEOs that run onchain businesses.
 
-## Quick Start
+## Getting Started
+
+### 1. Set Up a Server
+
+You need a Linux server that runs 24/7. We recommend [Oracle Cloud's free ARM instance](docs/oracle-cloud-setup.md) — 2 CPUs, 12 GB RAM, always free.
+
+> **New to servers?** The [Oracle Cloud setup guide](docs/oracle-cloud-setup.md) walks through everything from account creation to SSH. Paste it into an AI chat (ChatGPT, Claude, etc.) and ask it to guide you step by step.
+
+### 2. Create Accounts for Your CEO
+
+Before running init, create a separate identity for your CEO:
+
+- **Google account** — use it to sign up for everything below
+- **Farcaster** — the account your CEO will post from
+- **Neynar** — API access for Farcaster (sign up at [dev.neynar.com](https://dev.neynar.com))
+- **GitHub** (optional) — if your CEO will manage repos, give it its own account
+
+The CEO is effectively a team member who needs its own accounts.
+
+### 3. Install and Run
 
 ```bash
-pnpm install -g freeturtle
+# Install Node.js and pnpm (if not already installed)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+sudo npm install -g pnpm
+
+# Install FreeTurtle
+sudo pnpm install -g freeturtle
+
+# Set up your CEO (interactive wizard)
 freeturtle init
+
+# Start the daemon
 freeturtle start
+
+# Keep it running after reboot (Linux)
+freeturtle install-service
 ```
 
-The setup wizard walks you through everything: naming your AI CEO, connecting Farcaster, Telegram, GitHub, a database, and onchain data.
+The setup wizard walks you through naming your AI CEO, picking an LLM provider, connecting Farcaster, Telegram, GitHub, and more.
+
+### 4. Set Up Webhooks (optional)
+
+If you want your CEO to auto-respond to Farcaster mentions and replies, you need webhooks. This requires HTTPS, which means a domain and a reverse proxy.
+
+The quickest path:
+1. Get a free subdomain at [duckdns.org](https://www.duckdns.org)
+2. Install Caddy (`sudo apt install -y caddy`) — it handles HTTPS automatically
+3. Run `freeturtle webhooks` to register with Neynar
+
+See the [Oracle Cloud setup guide](docs/oracle-cloud-setup.md#setting-up-webhooks-farcaster-mentionsreplies) for full instructions.
 
 ## What It Does
 
@@ -35,7 +78,7 @@ FreeTurtle is a Node.js daemon that mostly sleeps and wakes up when:
 3. The **founder sends a message** via Terminal or Telegram
 4. A **webhook event** arrives (e.g. someone mentions the CEO on Farcaster)
 
-All three route to the same **task runner**, which:
+All four route to the same **task runner**, which:
 
 1. Loads `soul.md` (the CEO's identity and voice)
 2. Loads recent memory (posting log, post queue)
@@ -78,6 +121,24 @@ All three route to the same **task runner**, which:
 │               │ Audit Log │                          │
 │               └───────────┘                          │
 └──────────────────────────────────────────────────────┘
+```
+
+## CLI Commands
+
+```bash
+freeturtle init              # Set up a new AI CEO
+freeturtle start             # Start the daemon
+freeturtle start --chat      # Start with interactive terminal chat
+freeturtle status            # Show daemon status
+freeturtle send "message"    # Send a message to the running CEO
+freeturtle setup             # Reconfigure LLM provider
+freeturtle connect farcaster # Set up Farcaster signer
+freeturtle webhooks          # Set up Neynar webhooks (mentions, replies, watched users/channels)
+freeturtle approvals         # List pending approval requests
+freeturtle approve <id>      # Approve a pending action
+freeturtle reject <id>       # Reject a pending action
+freeturtle update            # Update to the latest version
+freeturtle install-service   # Install as a systemd service (Linux)
 ```
 
 ## Modules
@@ -189,7 +250,7 @@ Controls the daemon. Markdown format:
 ```markdown
 ## LLM
 - provider: claude_api
-- model: claude-sonnet-4-5-20250514
+- model: claude-sonnet-4-5
 - max_tokens: 4096
 
 ## Cron
@@ -236,46 +297,19 @@ DATABASE_URL=postgres://...
 RPC_URL=https://mainnet.base.org
 ```
 
-## CLI Commands
+## Self-Modification
 
-```bash
-freeturtle init              # Set up a new AI CEO
-freeturtle start             # Start the daemon
-freeturtle start --chat      # Start with interactive terminal chat
-freeturtle status            # Show daemon status
-freeturtle send "message"    # Send a message to the running CEO
-freeturtle setup             # Reconfigure LLM provider
-freeturtle connect farcaster # Set up Farcaster signer
-freeturtle webhooks          # Set up Neynar webhooks (mentions, replies, watched users/channels)
-freeturtle approvals         # List pending approval requests
-freeturtle approve <id>      # Approve a pending action
-freeturtle reject <id>       # Reject a pending action
-freeturtle update            # Update to the latest version
-freeturtle install-service   # Install as a systemd service (Linux)
-```
+FreeTurtle CEOs can modify their own behavior at runtime. Everything that defines the CEO — identity, voice, goals, config, memory — is a file in the workspace, and the CEO has tools to read and write those files.
 
-## Hosting
+Examples of what you can tell your CEO:
 
-We recommend [Oracle Cloud's free ARM instance](docs/oracle-cloud-setup.md) — 4 CPUs, 24 GB RAM, always free. The setup guide walks through account creation, instance setup, networking, and installing FreeTurtle as a system service.
+- **"Be more direct and honest"** — CEO edits the Voice section of `soul.md` (requires your approval)
+- **"Remember that @rish posts interesting stuff"** — CEO writes a note to `workspace/memory/notes.md`
+- **"Change posting to every 4 hours"** — CEO edits the cron schedule in `config.md` (requires approval, takes effect on restart)
+- **"Add a goal about growing the Discord"** — CEO edits the Goals section of `soul.md` (requires approval)
+- **"Write a brief on this week's engagement"** — CEO writes to `workspace/strategy/`
 
-```bash
-# On your server
-pnpm install -g freeturtle
-freeturtle init
-freeturtle start
-freeturtle install-service  # auto-restart on reboot
-```
-
-## Before You Begin
-
-**Create a separate account for your CEO.** Start with a Google account, then use it to sign up for:
-
-- Farcaster (the account your CEO will post from)
-- Neynar (API access for Farcaster)
-- GitHub (if your CEO will manage repos)
-- Any other services your CEO needs
-
-The CEO is effectively a team member who needs its own accounts. Identity separation keeps things clean.
+Changes to core files (`soul.md`, `config.md`, `.env`) always require founder approval. Memory and notes writes go through freely.
 
 ## Policy & Approvals
 
@@ -305,9 +339,9 @@ Add a `## Policy` section to `config.md`:
 ```
 
 **Allowlist rules:**
-- Not set → allow all (no restriction)
-- Empty list → deny everything
-- Populated list → only allow listed values
+- Not set — allow all (no restriction)
+- Empty list — deny everything
+- Populated list — only allow listed values
 
 ### Approval Flow
 
@@ -391,20 +425,6 @@ Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it 
 ### Cloud Provider Access
 
 Your cloud provider (Oracle, AWS, GCP) has full access to the underlying infrastructure — they can technically read any file on your VM. This is true of all cloud computing and is covered by their terms of service. For most use cases this is fine. If this is unacceptable for your threat model, run FreeTurtle on hardware you physically control.
-
-## Self-Modification
-
-FreeTurtle CEOs can modify their own behavior at runtime. Everything that defines the CEO — identity, voice, goals, config, memory — is a file in the workspace, and the CEO has tools to read and write those files.
-
-Examples of what you can tell your CEO:
-
-- **"Be more direct and honest"** → CEO edits the Voice section of `soul.md` (requires your approval)
-- **"Remember that @rish posts interesting stuff"** → CEO writes a note to `workspace/memory/notes.md`
-- **"Change posting to every 4 hours"** → CEO edits the cron schedule in `config.md` (requires approval, takes effect on restart)
-- **"Add a goal about growing the Discord"** → CEO edits the Goals section of `soul.md` (requires approval)
-- **"Write a brief on this week's engagement"** → CEO writes to `workspace/strategy/`
-
-Changes to core files (`soul.md`, `config.md`, `.env`) always require founder approval. Memory and notes writes go through freely.
 
 ## The Two-Turtle Vision (v0.2)
 
