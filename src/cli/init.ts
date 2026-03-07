@@ -17,7 +17,7 @@ const TURTLE = `
       \x1b[38;2;94;255;164m|_________/\x1b[0m
       \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m
 
-      \x1b[1mFreeTurtle\x1b[0m  \x1b[2mv0.1.14\x1b[0m
+      \x1b[1mFreeTurtle\x1b[0m  \x1b[2mv0.1.15\x1b[0m
 `;
 
 const HATCH_FRAMES = [
