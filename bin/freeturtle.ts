@@ -144,6 +144,15 @@ connect
     await connectFarcaster(opts.dir);
   });
 
+connect
+  .command("gmail")
+  .description("Connect Gmail for reading and sending emails")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { connectGmail } = await import("../src/cli/connect-gmail.js");
+    await connectGmail(opts.dir);
+  });
+
 program
   .command("webhooks")
   .description("Set up Neynar webhooks for Farcaster mentions")

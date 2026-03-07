@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 import { runSetup, type SetupResult } from "../setup.js";
 import { LLMClient } from "../llm.js";
 import { connectFarcaster } from "./connect-farcaster.js";
+import { connectGmail } from "./connect-gmail.js";
 import { scanForSecrets, redactSecrets, condenseDocs } from "./intake.js";
 import { testTelegram, testGitHub, testDatabase, testOnchain } from "./connection-tests.js";
 import { createWebhook, channelToUrl, type WebhookSubscription } from "../webhooks/neynar.js";
@@ -192,6 +193,11 @@ export async function runInit(dir: string): Promise<void> {
     telegram: boolean;
     telegramToken: string;
     telegramOwner: string;
+    gmail: boolean;
+    googleClientId: string;
+    googleClientSecret: string;
+    googleRefreshToken: string;
+    gmailEmail: string;
     github: boolean;
     githubToken: string;
     database: boolean;
@@ -221,6 +227,11 @@ export async function runInit(dir: string): Promise<void> {
     telegram: false,
     telegramToken: "",
     telegramOwner: "",
+    gmail: false,
+    googleClientId: "",
+    googleClientSecret: "",
+    googleRefreshToken: "",
+    gmailEmail: "",
     github: false,
     githubToken: "",
     database: false,
@@ -583,7 +594,33 @@ export async function runInit(dir: string): Promise<void> {
       }
       return true;
     },
-    // 9. GitHub
+    // Gmail
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect Gmail? (read and send emails)",
+        initialValue: state.gmail,
+      });
+      if (p.isCancel(enable)) return false;
+      state.gmail = enable;
+      if (enable) {
+        const result = await connectGmail(dir);
+        if (result) {
+          state.googleClientId = result.clientId;
+          state.googleClientSecret = result.clientSecret;
+          state.gmailEmail = result.email;
+          // Read the refresh token that connectGmail saved to .env
+          try {
+            const envContent = await readFile(join(dir, ".env"), "utf-8");
+            const match = envContent.match(/^GOOGLE_GMAIL_REFRESH_TOKEN=(.+)$/m);
+            if (match) state.googleRefreshToken = match[1];
+          } catch { /* ignore */ }
+        } else {
+          state.gmail = false;
+        }
+      }
+      return true;
+    },
+    // GitHub
     async () => {
       const enable = await p.confirm({
         message: "Connect GitHub? (issues and file commits)",
@@ -821,6 +858,7 @@ export async function runInit(dir: string): Promise<void> {
   const modules = [
     state.farcaster && "Farcaster",
     state.telegram && "Telegram",
+    state.gmail && "Gmail",
     state.github && "GitHub",
     state.database && "Database",
     state.onchain && "Onchain",
@@ -922,6 +960,9 @@ ${state.founderName}.
           "### database",
           `- enabled: ${state.database}`,
           "",
+          "### gmail",
+          `- enabled: ${state.gmail}`,
+          "",
           "### github",
           `- enabled: ${state.github}`,
           "",
@@ -951,6 +992,9 @@ ${state.founderName}.
         if (state.fid) envLines.push(`FARCASTER_FID=${state.fid}`);
         if (state.telegramToken) envLines.push(`TELEGRAM_BOT_TOKEN=${state.telegramToken}`);
         if (state.telegramOwner) envLines.push(`TELEGRAM_OWNER_ID=${state.telegramOwner}`);
+        if (state.googleClientId) envLines.push(`GOOGLE_CLIENT_ID=${state.googleClientId}`);
+        if (state.googleClientSecret) envLines.push(`GOOGLE_CLIENT_SECRET=${state.googleClientSecret}`);
+        if (state.googleRefreshToken) envLines.push(`GOOGLE_GMAIL_REFRESH_TOKEN=${state.googleRefreshToken}`);
         if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
         if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
         if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);

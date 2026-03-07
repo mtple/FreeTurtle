@@ -44,6 +44,21 @@ export async function testDatabase(url: string): Promise<void> {
 }
 
 /**
+ * Test Gmail OAuth credentials by calling the profile endpoint.
+ */
+export async function testGmail(
+  clientId: string,
+  clientSecret: string,
+  refreshToken: string,
+): Promise<void> {
+  const { createGoogleOAuth2Client } = await import("../oauth/google.js");
+  const { GmailClient } = await import("../modules/gmail/client.js");
+  const auth = createGoogleOAuth2Client({ clientId, clientSecret, refreshToken });
+  const client = new GmailClient(auth);
+  await client.getProfile();
+}
+
+/**
  * Test an EVM RPC URL by calling eth_blockNumber.
  */
 export async function testOnchain(rpcUrl: string): Promise<void> {
