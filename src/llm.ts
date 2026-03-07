@@ -33,6 +33,7 @@ export class LLMClient {
   private anthropic?: Anthropic;
   private openai?: OpenAI;
   private anthropicClaudeCodeOAuth = false;
+  private openaiCodexSubscription = false;
 
   constructor(options: LLMClientOptions) {
     this.mode = options.provider;
@@ -97,10 +98,16 @@ export class LLMClient {
       if (!options.oauthToken) {
         throw new Error("LLMClient missing required credential: oauthToken");
       }
+      const accountId = extractOpenAIAccountId(options.oauthToken);
+      this.openaiCodexSubscription = true;
       this.openai = new OpenAI({
-        // OpenAI SDK uses bearer auth via apiKey; OAuth access tokens also work here.
         apiKey: options.oauthToken,
-        baseURL: options.baseUrl,
+        baseURL: options.baseUrl ?? "https://chatgpt.com/backend-api/codex",
+        defaultHeaders: {
+          "chatgpt-account-id": accountId,
+          "OpenAI-Beta": "responses=experimental",
+          originator: "pi",
+        },
       });
       return;
     }
@@ -262,6 +269,10 @@ export class LLMClient {
     messages: OpenAI.ChatCompletionMessageParam[],
     tools?: ToolDefinition[]
   ): Promise<LLMResponse> {
+    if (this.openaiCodexSubscription) {
+      return this.chatOpenAICodexResponses(systemPrompt, messages, tools);
+    }
+
     const response = await this.openai!.chat.completions.create({
       model: this.model,
       messages: [
@@ -296,6 +307,74 @@ export class LLMClient {
             input: JSON.parse(tc.function.arguments) as Record<string, unknown>,
           });
         }
+      }
+    }
+
+    return { text, tool_calls: toolCalls };
+  }
+
+  private async chatOpenAICodexResponses(
+    systemPrompt: string,
+    messages: OpenAI.ChatCompletionMessageParam[],
+    tools?: ToolDefinition[]
+  ): Promise<LLMResponse> {
+    const input = mapMessagesToResponsesInput(messages);
+    const requestBody: any = {
+      model: this.model,
+      store: false,
+      stream: false,
+      instructions: systemPrompt,
+      input,
+      ...(tools?.length
+        ? {
+            tools: tools.map((t) => ({
+              type: "function" as const,
+              name: t.name,
+              description: t.description,
+              parameters: t.input_schema,
+              strict: false,
+            })),
+            tool_choice: "auto" as const,
+            parallel_tool_calls: true,
+          }
+        : {}),
+    };
+
+    const response = await this.openai!.responses.create(requestBody);
+
+    let text = typeof response.output_text === "string" ? response.output_text : "";
+    const toolCalls: ToolCall[] = [];
+    const outputItems = Array.isArray(response.output) ? response.output : [];
+
+    for (const item of outputItems) {
+      if (!item || typeof item !== "object") continue;
+
+      if ((item as { type?: unknown }).type === "function_call") {
+        const call = item as {
+          id?: string;
+          call_id?: string;
+          name?: string;
+          arguments?: string;
+        };
+        if (!call.name) continue;
+        toolCalls.push({
+          id: call.call_id ?? call.id ?? `call_${toolCalls.length}`,
+          name: call.name,
+          input: safeJsonParseObject(call.arguments),
+        });
+        continue;
+      }
+
+      if ((item as { type?: unknown }).type === "message" && !text) {
+        const message = item as {
+          role?: string;
+          content?: Array<{ type?: string; text?: string }>;
+        };
+        if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
+        text = message.content
+          .filter((c) => c?.type === "output_text" && typeof c.text === "string")
+          .map((c) => c.text as string)
+          .join("");
       }
     }
 
@@ -349,5 +428,104 @@ export class LLMClient {
     // If we hit the limit, return whatever text we have
     const last = await this.chatOpenAI(systemPrompt, messages, []);
     return last.text || "(Agent reached maximum tool call iterations)";
+  }
+}
+
+function extractOpenAIAccountId(token: string): string {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) throw new Error("Invalid token");
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf-8")
+    ) as Record<string, unknown>;
+    const auth = payload["https://api.openai.com/auth"];
+    if (!auth || typeof auth !== "object") {
+      throw new Error("No OpenAI auth claim");
+    }
+    const accountId = (auth as Record<string, unknown>).chatgpt_account_id;
+    if (!accountId || typeof accountId !== "string") {
+      throw new Error("No account ID in token");
+    }
+    return accountId;
+  } catch {
+    throw new Error("Failed to extract accountId from token");
+  }
+}
+
+function mapMessagesToResponsesInput(
+  messages: OpenAI.ChatCompletionMessageParam[]
+): Array<Record<string, unknown>> {
+  const input: Array<Record<string, unknown>> = [];
+
+  for (const message of messages) {
+    if (message.role === "user") {
+      const text = contentToText(message.content);
+      input.push({
+        role: "user",
+        content: [{ type: "input_text", text }],
+      });
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      const text = contentToText(message.content);
+      if (text) {
+        input.push({
+          role: "assistant",
+          content: [{ type: "output_text", text }],
+        });
+      }
+
+      const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+      for (const tc of toolCalls) {
+        if (tc.type !== "function") continue;
+        input.push({
+          type: "function_call",
+          call_id: tc.id,
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        });
+      }
+      continue;
+    }
+
+    if (message.role === "tool") {
+      const output = contentToText(message.content);
+      input.push({
+        type: "function_call_output",
+        call_id: message.tool_call_id,
+        output,
+      });
+    }
+  }
+
+  return input;
+}
+
+function contentToText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+
+  const parts: string[] = [];
+  for (const item of content) {
+    if (!item || typeof item !== "object") continue;
+    const typed = item as Record<string, unknown>;
+    const text = typed.text;
+    if (typeof text === "string" && text.length > 0) {
+      parts.push(text);
+    }
+  }
+  return parts.join("\n");
+}
+
+function safeJsonParseObject(raw: string | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
   }
 }

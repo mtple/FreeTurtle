@@ -38,17 +38,13 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
   // Check for existing webhooks
   const s = p.spinner();
   s.start("Checking existing webhooks");
-  let existing;
+  let existing: Awaited<ReturnType<typeof listWebhooks>> = [];
   try {
     existing = await listWebhooks(apiKey);
-  } catch (err) {
-    s.stop("Failed");
-    p.log.error(
-      `Could not list webhooks: ${err instanceof Error ? err.message : "Unknown error"}`
-    );
-    return;
+    s.stop(`Found ${existing.length} existing webhook(s)`);
+  } catch {
+    s.stop("No existing webhooks found");
   }
-  s.stop(`Found ${existing.length} existing webhook(s)`);
 
   if (existing.length > 0) {
     p.log.info("Current webhooks:");
@@ -102,19 +98,42 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
       "How it works:",
       "  1. You pick what to listen for",
       "  2. FreeTurtle runs a webhook server on your machine",
-      "  3. Neynar sends matching events to your server",
+      "  3. Neynar sends matching events to your server via HTTPS",
       "",
-      "You'll need:",
-      "  - Your server's public IP address",
-      "    Find it: run `curl ifconfig.me` on your server",
-      "    Or: Oracle Cloud Console > Compute > Instances > Public IP",
+      "Neynar requires an HTTPS URL, so you need a domain or",
+      "free subdomain with a reverse proxy. Here's the easiest setup:",
       "",
-      "  - Port 3456 open in BOTH firewalls (if on Oracle Cloud):",
+      "Step 1: Get a free subdomain (skip if you have a domain)",
+      "  - Go to duckdns.org and sign in with Google/GitHub",
+      "  - Create a subdomain (e.g. myturtle.duckdns.org)",
+      "  - Set it to your server's public IP",
+      "    (find your IP: run `curl ifconfig.me` on the server)",
+      "",
+      "Step 2: Open ports 80 and 443 for HTTPS",
+      "  On Oracle Cloud (BOTH firewalls):",
       "    1. Oracle Cloud Console: Networking > VCN > Subnet >",
-      "       Security List > Add Ingress Rule (TCP port 3456)",
-      "    2. On the server: sudo iptables -I INPUT -p tcp --dport 3456 -j ACCEPT",
+      "       Security List > Add TWO Ingress Rules:",
+      "       Rule 1: Source CIDR 0.0.0.0/0, TCP, Dest Port 80",
+      "       Rule 2: Source CIDR 0.0.0.0/0, TCP, Dest Port 443",
+      "    2. On the server:",
+      "       sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT",
+      "       sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT",
       "",
-      "Your webhook URL will be: http://<YOUR_PUBLIC_IP>:3456/webhook",
+      "Step 3: Install Caddy (auto-HTTPS reverse proxy)",
+      "  sudo apt install -y caddy",
+      "",
+      "Step 4: Configure Caddy",
+      "  sudo tee /etc/caddy/Caddyfile <<EOF",
+      "  yourname.duckdns.org {",
+      "      reverse_proxy localhost:3456",
+      "  }",
+      "  EOF",
+      "  sudo systemctl restart caddy",
+      "",
+      "Your webhook URL will be: https://yourname.duckdns.org/webhook",
+      "",
+      "Tip: paste these instructions into an AI chat (ChatGPT, Claude,",
+      "etc.) and ask it to walk you through step by step.",
       "",
       "Ctrl+C at any prompt to cancel.",
     ].join("\n"),
@@ -123,6 +142,8 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
 
   // What to listen for
   const ownFid = parseInt(fid, 10);
+
+  p.log.info("Use spacebar to toggle options, enter to confirm.");
 
   const listeners = await p.multiselect({
     message: "What should your CEO listen for?",
@@ -188,26 +209,13 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
   });
   if (p.isCancel(port)) { p.cancel("Cancelled."); return; }
 
-  p.note(
-    [
-      "Neynar needs a public URL to send events to.",
-      "This is your server's public IP + the port you chose + /webhook",
-      "",
-      "To find your public IP:",
-      "  Oracle Cloud Console: Compute > Instances > Public IP Address",
-      "  From the server:     curl ifconfig.me",
-      "",
-      `Example: http://<YOUR_PUBLIC_IP>:${port}/webhook`,
-    ].join("\n"),
-    "Webhook URL"
-  );
-
   const url = await p.text({
-    message: "Your server's public webhook URL",
-    placeholder: `http://<YOUR_PUBLIC_IP>:${port}/webhook`,
+    message: "Your HTTPS webhook URL",
+    placeholder: "https://yourname.duckdns.org/webhook",
     validate: (v) => {
       if (!v?.trim()) return "Required";
       if (!v.includes("/webhook")) return "URL should end with /webhook";
+      if (!v.startsWith("https://") && !v.startsWith("http://localhost")) return "Neynar requires HTTPS (or http://localhost)";
       return undefined;
     },
   });
@@ -273,11 +281,7 @@ export async function runWebhooksSetup(dir: string): Promise<void> {
 
   p.note(
     [
-      "Make sure port " + port + " is open in BOTH firewalls (if on Oracle Cloud):",
-      "",
-      "  1. Oracle Cloud Console: Networking > VCN > Subnet >",
-      "     Security List > Add Ingress Rule (TCP port " + port + ")",
-      "  2. On the server: sudo iptables -I INPUT -p tcp --dport " + port + " -j ACCEPT",
+      "Make sure Caddy is running and your domain points to this server.",
       "",
       "Then restart FreeTurtle:",
       "",

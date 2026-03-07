@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts";
 import { createHash, randomBytes } from "node:crypto";
-import { createServer } from "node:http";
 import { chmod, writeFile, readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import type { LLMProvider } from "./llm.js";
 import {
@@ -9,6 +9,7 @@ import {
   buildOpenAIOAuthAuthorizeUrl,
   exchangeOpenAIOAuthCode,
 } from "./oauth/openai.js";
+import { saveOpenAICodexProfile } from "./oauth/store.js";
 
 export interface SetupResult {
   provider: LLMProvider;
@@ -136,8 +137,10 @@ export async function runSetup(dir: string): Promise<SetupResult> {
       "Use OpenAI Codex OAuth (same as OpenClaw):",
       "  1. FreeTurtle generates an auth URL",
       "  2. Open the URL and sign in with ChatGPT",
-      "  3. Callback is captured on localhost:1455 (or paste redirect URL/code)",
-      "  4. FreeTurtle exchanges code at auth.openai.com/oauth/token",
+      "  3. Browser redirects to localhost callback and may fail to load",
+      "  4. Copy the full callback URL from your browser address bar",
+      "  5. Paste callback URL into this CLI",
+      "  6. FreeTurtle exchanges code at auth.openai.com/oauth/token",
     ],
     openrouter: [
       "Get your API key from:",
@@ -182,6 +185,19 @@ export async function runSetup(dir: string): Promise<SetupResult> {
     const oauthTokens = await runOpenAICodexOAuthFlow();
     if (oauthTokens) {
       openaiSubscriptionTokens = oauthTokens;
+      const accountId = extractOpenAIAccountIdFromAccessToken(
+        oauthTokens.accessToken
+      );
+      await saveOpenAICodexProfile(dir, {
+        access_token: oauthTokens.accessToken,
+        ...(oauthTokens.refreshToken
+          ? { refresh_token: oauthTokens.refreshToken }
+          : {}),
+        ...(typeof oauthTokens.expiresAt === "number"
+          ? { expires_at: oauthTokens.expiresAt }
+          : {}),
+        ...(accountId ? { account_id: accountId } : {}),
+      });
       credential = oauthTokens.accessToken;
     } else {
       const detected = await readCodexAccessToken();
@@ -325,21 +341,17 @@ async function runOpenAICodexOAuthFlow(): Promise<OpenAIOAuthTokens | null> {
       "Open this URL in your browser and sign in with ChatGPT:",
       authUrl,
       "",
-      "After approving, you'll be redirected to localhost:1455.",
-      "If auto-capture fails, paste the final redirect URL or code.",
+      "After approving, your browser will redirect to localhost and may show an error.",
+      "FreeTurtle will try to auto-capture the callback first.",
+      "If that fails, copy the full URL from your browser address bar and paste it below.",
     ].join("\n"),
     "OpenAI OAuth"
   );
 
-  const spinner = p.spinner();
-  spinner.start("Waiting for OAuth callback on http://127.0.0.1:1455/auth/callback");
-  const callback = await waitForOpenAICallback(state, 120_000);
-  spinner.stop(callback ? "OAuth callback received" : "No callback captured");
-
-  let code = callback?.code ?? null;
+  let code = await waitForOpenAICallbackCode(state, 90_000);
   if (!code) {
     const pasted = await p.text({
-      message: "Paste redirect URL (or just the code)",
+      message: "Paste callback URL (or just the code)",
       validate: (v) => (v?.trim() ? undefined : "Required"),
     });
     if (p.isCancel(pasted)) {
@@ -347,12 +359,14 @@ async function runOpenAICodexOAuthFlow(): Promise<OpenAIOAuthTokens | null> {
       process.exit(0);
     }
     code = extractCodeFromInput(pasted, state);
-    if (!code) {
-      p.log.warn("Could not parse a valid OAuth code. Skipping OAuth login.");
-      return null;
-    }
   }
 
+  if (!code) {
+    p.log.warn("Could not parse a valid OAuth code. Skipping OAuth login.");
+    return null;
+  }
+
+  const spinner = p.spinner();
   spinner.start("Exchanging OAuth code for token");
   try {
     const tokens = await exchangeOpenAIOAuthCode(code, codeVerifier);
@@ -364,62 +378,6 @@ async function runOpenAICodexOAuthFlow(): Promise<OpenAIOAuthTokens | null> {
     p.log.warn(`OpenAI OAuth token exchange failed: ${msg}`);
     return null;
   }
-}
-
-function waitForOpenAICallback(
-  expectedState: string,
-  timeoutMs: number
-): Promise<{ code: string } | null> {
-  return new Promise((resolve) => {
-    let finished = false;
-    const complete = (value: { code: string } | null) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer);
-      resolve(value);
-    };
-
-    const server = createServer((req, res) => {
-      try {
-        const url = new URL(req.url ?? "/", "http://localhost:1455");
-        if (url.pathname !== "/auth/callback") {
-          res.statusCode = 404;
-          res.end("Not found");
-          return;
-        }
-
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        if (!code || !state || state !== expectedState) {
-          res.statusCode = 400;
-          res.end("Invalid OAuth callback.");
-          return;
-        }
-
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.end(
-          "<!doctype html><html><body><h3>Authentication successful.</h3><p>Return to your terminal.</p></body></html>"
-        );
-        void server.close();
-        complete({ code });
-      } catch {
-        res.statusCode = 400;
-        res.end("Invalid callback.");
-      }
-    });
-
-    server.on("error", () => {
-      complete(null);
-    });
-
-    server.listen(1455, "127.0.0.1");
-
-    const timer = setTimeout(() => {
-      void server.close();
-      complete(null);
-    }, timeoutMs);
-  });
 }
 
 function extractCodeFromInput(input: string, expectedState: string): string | null {
@@ -437,6 +395,74 @@ function extractCodeFromInput(input: string, expectedState: string): string | nu
     if (!code) return null;
     if (state && state !== expectedState) return null;
     return code;
+  } catch {
+    return null;
+  }
+}
+
+async function waitForOpenAICallbackCode(
+  expectedState: string,
+  timeoutMs: number
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout: NodeJS.Timeout | undefined;
+    const settle = (code: string | null) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      server.close(() => resolve(code));
+    };
+
+    const server = createServer((req, res) => {
+      try {
+        const parsed = new URL(req.url ?? "", "http://localhost:1455");
+        const code = parsed.searchParams.get("code");
+        const state = parsed.searchParams.get("state");
+        if (
+          parsed.pathname === "/auth/callback" &&
+          code &&
+          (!state || state === expectedState)
+        ) {
+          res.statusCode = 200;
+          res.setHeader("content-type", "text/html; charset=utf-8");
+          res.end(
+            "<html><body><h1>Authenticated</h1><p>You can return to FreeTurtle.</p></body></html>"
+          );
+          settle(code);
+          return;
+        }
+      } catch {
+        // ignore parse errors
+      }
+
+      res.statusCode = 400;
+      res.end("Invalid OAuth callback");
+    });
+
+    server.on("error", () => settle(null));
+    server.listen(1455, "127.0.0.1", () => {
+      // no-op
+    });
+
+    timeout = setTimeout(() => settle(null), timeoutMs);
+  });
+}
+
+function extractOpenAIAccountIdFromAccessToken(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf-8")
+    ) as Record<string, unknown>;
+    const auth = payload["https://api.openai.com/auth"];
+    if (!auth || typeof auth !== "object") return null;
+    const accountId = (auth as Record<string, unknown>).chatgpt_account_id;
+    return typeof accountId === "string" && accountId.trim()
+      ? accountId.trim()
+      : null;
   } catch {
     return null;
   }

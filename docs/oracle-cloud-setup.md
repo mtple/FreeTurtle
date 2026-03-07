@@ -206,15 +206,82 @@ Or check the log file:
 cat /tmp/freeturtle/freeturtle.log
 ```
 
-## Opening Firewall Ports
+## Setting Up Webhooks (Farcaster mentions/replies)
 
-Oracle has two firewalls — the cloud security list AND the OS-level firewall.
+Neynar webhooks require an HTTPS URL. The easiest setup is a free subdomain + Caddy (auto-HTTPS reverse proxy).
 
-If you need to open a port (e.g. for a webhook):
+### 1. Get a Free Subdomain
+
+If you don't have a domain, use [DuckDNS](https://www.duckdns.org) (free):
+
+1. Sign in with Google/GitHub
+2. Create a subdomain (e.g. `myturtle.duckdns.org`)
+3. Set it to your server's public IP (find it: `curl ifconfig.me` on the server)
+
+If you already have a domain, add an A record pointing a subdomain to your server IP.
+
+### 2. Open Ports 80 and 443
+
+Oracle has two firewalls — both need ports open.
 
 **Cloud Security List:**
 1. Networking > VCN > your VCN > your subnet > Default Security List
-2. Add Ingress Rule for the port
+2. Add **two** Ingress Rules:
+   - Rule 1: Source CIDR `0.0.0.0/0`, TCP, Destination Port Range `80`
+   - Rule 2: Source CIDR `0.0.0.0/0`, TCP, Destination Port Range `443`
+
+**OS-level firewall:**
+```bash
+sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+```
+
+### 3. Install Caddy
+
+```bash
+sudo apt install -y caddy
+```
+
+### 4. Configure Caddy
+
+Replace `yourname.duckdns.org` with your actual domain:
+
+```bash
+sudo tee /etc/caddy/Caddyfile <<EOF
+yourname.duckdns.org {
+    reverse_proxy localhost:3456
+}
+EOF
+sudo systemctl restart caddy
+```
+
+Caddy automatically provisions and renews HTTPS certificates — no certbot or manual config needed.
+
+### 5. Set Up the Webhook
+
+```bash
+freeturtle webhooks
+```
+
+When prompted for the webhook URL, enter: `https://yourname.duckdns.org/webhook`
+
+### Verify It Works
+
+```bash
+curl https://yourname.duckdns.org/webhook
+```
+
+If Caddy is working, you should get a response (even if FreeTurtle isn't running yet — Caddy will return a 502).
+
+## Opening Other Firewall Ports
+
+Oracle has two firewalls — the cloud security list AND the OS-level firewall.
+
+If you need to open a port:
+
+**Cloud Security List:**
+1. Networking > VCN > your VCN > your subnet > Default Security List
+2. Add Ingress Rule: Source CIDR `0.0.0.0/0`, TCP, Destination Port Range: your port
 
 **OS-level firewall:**
 ```bash

@@ -14,6 +14,10 @@ import type { Channel } from "./channels/types.js";
 import { WebhookServer } from "./webhooks/server.js";
 import { createLogger, type Logger } from "./logger.js";
 import { refreshOpenAIAccessToken } from "./oauth/openai.js";
+import {
+  loadOpenAICodexProfile,
+  saveOpenAICodexProfile,
+} from "./oauth/store.js";
 
 export interface DaemonOptions {
   chat?: boolean;
@@ -65,6 +69,7 @@ export class FreeTurtleDaemon {
     // Refresh OpenAI OAuth access token when needed before creating the LLM client.
     if (provider === "openai_subscription") {
       const openaiTokenEnv = credEnvName ?? FALLBACK_ENV[provider];
+      await this.syncOpenAIOAuthFromStore(env, openaiTokenEnv);
       await this.maybeRefreshOpenAIOAuthToken(env, openaiTokenEnv);
     }
 
@@ -387,6 +392,39 @@ export class FreeTurtleDaemon {
         ? { OPENAI_OAUTH_EXPIRES_AT: env.OPENAI_OAUTH_EXPIRES_AT }
         : {}),
     });
+
+    const existingProfile = await loadOpenAICodexProfile(this.dir);
+    await saveOpenAICodexProfile(this.dir, {
+      access_token: env[tokenEnvName],
+      ...(env.OPENAI_OAUTH_REFRESH_TOKEN
+        ? { refresh_token: env.OPENAI_OAUTH_REFRESH_TOKEN }
+        : {}),
+      ...(env.OPENAI_OAUTH_EXPIRES_AT && /^\d+$/.test(env.OPENAI_OAUTH_EXPIRES_AT)
+        ? { expires_at: parseInt(env.OPENAI_OAUTH_EXPIRES_AT, 10) }
+        : {}),
+      ...(existingProfile?.account_id
+        ? { account_id: existingProfile.account_id }
+        : {}),
+    });
+  }
+
+  private async syncOpenAIOAuthFromStore(
+    env: Record<string, string>,
+    tokenEnvName: string
+  ): Promise<void> {
+    const stored = await loadOpenAICodexProfile(this.dir);
+    if (!stored?.access_token) return;
+
+    env[tokenEnvName] = stored.access_token;
+    if (stored.refresh_token) {
+      env.OPENAI_OAUTH_REFRESH_TOKEN = stored.refresh_token;
+    }
+    if (typeof stored.expires_at === "number") {
+      env.OPENAI_OAUTH_EXPIRES_AT = String(stored.expires_at);
+    }
+    if (stored.account_id) {
+      env.OPENAI_ACCOUNT_ID = stored.account_id;
+    }
   }
 
   private async persistEnvVars(vars: Record<string, string>): Promise<void> {
