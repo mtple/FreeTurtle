@@ -51,11 +51,9 @@ export async function loadModules(
 
     try {
       const mod = new ModuleClass();
-      await mod.initialize(
-        moduleConfig as unknown as Record<string, unknown>,
-        env,
-        { policy },
-      );
+      const cfg = { ...(moduleConfig as unknown as Record<string, unknown>) };
+      if (dir) cfg._workspaceDir = dir;
+      await mod.initialize(cfg, env, { policy });
       modules.push(mod);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";

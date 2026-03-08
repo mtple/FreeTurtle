@@ -41,7 +41,7 @@ export class OnchainClient {
     limit = 10
   ): Promise<Record<string, unknown>[]> {
     if (!this.basescanKey) {
-      return [{ error: "BASESCAN_API_KEY not set, cannot fetch transactions" }];
+      return [{ error: "BLOCK_EXPLORER_API_KEY not set, cannot fetch transactions" }];
     }
 
     const url = `https://api.basescan.org/api?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=${limit}&sort=desc&apikey=${this.basescanKey}`;

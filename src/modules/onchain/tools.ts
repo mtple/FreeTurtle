@@ -45,7 +45,7 @@ export const onchainTools: ToolDefinition[] = [
   {
     name: "get_transactions",
     description:
-      "Get recent transactions for an address on Base (requires BASESCAN_API_KEY).",
+      "Get recent transactions for an address on Base (requires BLOCK_EXPLORER_API_KEY).",
     input_schema: {
       type: "object",
       properties: {

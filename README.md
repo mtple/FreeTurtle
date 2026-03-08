@@ -217,7 +217,7 @@ Read smart contracts, balances, and transactions on Base.
 | `get_balance` | Get ETH balance of an address |
 | `get_transactions` | Get recent transactions (requires BaseScan key) |
 
-**Env:** `RPC_URL`, `BASESCAN_API_KEY` (optional)
+**Env:** `RPC_URL`, `BLOCK_EXPLORER_API_KEY` (optional)
 
 ## Configuration
 
