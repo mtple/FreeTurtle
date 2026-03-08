@@ -19,6 +19,22 @@ import {
   saveOpenAICodexProfile,
 } from "./oauth/store.js";
 
+function isTransientNetworkError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  const cause = err.cause instanceof Error ? err.cause.message.toLowerCase() : "";
+  const patterns = [
+    "econnreset",
+    "etimedout",
+    "enotfound",
+    "econnrefused",
+    "fetch failed",
+    "socket hang up",
+    "network error",
+    "abort",
+  ];
+  return patterns.some((p) => msg.includes(p) || cause.includes(p));
+}
+
 export interface DaemonOptions {
   chat?: boolean;
 }
@@ -188,10 +204,22 @@ export class FreeTurtleDaemon {
       await this.stop();
       process.exit(0);
     };
-    process.on("SIGINT", () => void shutdown());
-    process.on("SIGTERM", () => void shutdown());
+    process.on("SIGINT", () => { shutdown().catch((e) => this.logger.error(`Shutdown error: ${e}`)); });
+    process.on("SIGTERM", () => { shutdown().catch((e) => this.logger.error(`Shutdown error: ${e}`)); });
     process.on("uncaughtException", (err) => {
+      if (isTransientNetworkError(err)) {
+        this.logger.warn(`Transient network error (ignored): ${err.message}`);
+        return;
+      }
       this.logger.error(`Uncaught exception: ${err.message}`);
+    });
+    process.on("unhandledRejection", (reason) => {
+      const err = reason instanceof Error ? reason : new Error(String(reason));
+      if (isTransientNetworkError(err)) {
+        this.logger.warn(`Transient network error (ignored): ${err.message}`);
+        return;
+      }
+      this.logger.error(`Unhandled rejection: ${err.message}`);
     });
 
     this.logger.info("FreeTurtle is running");
@@ -265,8 +293,11 @@ export class FreeTurtleDaemon {
         data += chunk.toString();
       });
       conn.on("end", () => {
-        void this.handleIpc(data.trim()).then((response) => {
+        this.handleIpc(data.trim()).then((response) => {
           conn.write(response);
+          conn.end();
+        }).catch((err) => {
+          this.logger.error(`IPC handler error: ${err instanceof Error ? err.message : err}`);
           conn.end();
         });
       });
@@ -337,7 +368,10 @@ export class FreeTurtleDaemon {
     }
 
     if (command === "stop") {
-      void this.stop().then(() => process.exit(0));
+      this.stop().then(() => process.exit(0)).catch((e) => {
+        this.logger.error(`Stop error: ${e}`);
+        process.exit(1);
+      });
       return "Stopping...";
     }
 

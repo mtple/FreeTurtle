@@ -29,7 +29,9 @@ export class Heartbeat {
     );
 
     this.timer = setInterval(() => {
-      void this.tick();
+      this.tick().catch((err) => {
+        this.logger.error(`Heartbeat tick error: ${err instanceof Error ? err.message : err}`);
+      });
     }, this.interval);
   }
 
