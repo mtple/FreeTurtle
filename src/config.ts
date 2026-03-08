@@ -19,6 +19,11 @@ export interface ModuleConfig {
   [key: string]: string | boolean;
 }
 
+export interface HeartbeatConfig {
+  enabled: boolean;
+  interval_minutes: number;
+}
+
 export interface FreeTurtleConfig {
   llm: {
     provider: string;
@@ -29,6 +34,7 @@ export interface FreeTurtleConfig {
     oauth_token_env?: string;
     [key: string]: string | number | undefined;
   };
+  heartbeat: HeartbeatConfig;
   cron: Record<string, CronTask>;
   channels: Record<string, ChannelConfig>;
   modules: Record<string, ModuleConfig>;
@@ -54,6 +60,7 @@ function parseConfig(raw: string): FreeTurtleConfig {
 
   const config: FreeTurtleConfig = {
     llm: { provider: "claude_api", model: "claude-sonnet-4-5", max_tokens: 4096 },
+    heartbeat: { enabled: true, interval_minutes: 30 },
     cron: {},
     channels: {},
     modules: {},
@@ -93,6 +100,12 @@ function parseConfig(raw: string): FreeTurtleConfig {
         config.llm.max_tokens = parseInt(value, 10);
       } else {
         (config.llm as Record<string, string | number>)[key] = value;
+      }
+    } else if (currentSection === "heartbeat") {
+      if (key === "enabled") {
+        config.heartbeat.enabled = value === "true";
+      } else if (key === "interval_minutes") {
+        config.heartbeat.interval_minutes = parseInt(value, 10);
       }
     } else if (currentSection === "cron" && currentSubSection) {
       if (!config.cron[currentSubSection]) {

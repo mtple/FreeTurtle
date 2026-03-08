@@ -133,16 +133,21 @@ export class FreeTurtleDaemon {
     }
 
     // Start heartbeat — send alerts to all active channels
-    this.heartbeat = new Heartbeat(this.runner, this.logger, {
-      onAlert: (msg) => {
-        for (const ch of this.channels) {
-          ch.send(msg).catch((err) => {
-            this.logger.error(`Failed to send alert via ${ch.name}: ${err}`);
-          });
-        }
-      },
-    });
-    this.heartbeat.start();
+    if (config.heartbeat.enabled) {
+      this.heartbeat = new Heartbeat(this.runner, this.logger, {
+        intervalMs: config.heartbeat.interval_minutes * 60 * 1000,
+        onAlert: (msg) => {
+          for (const ch of this.channels) {
+            ch.send(msg).catch((err) => {
+              this.logger.error(`Failed to send alert via ${ch.name}: ${err}`);
+            });
+          }
+        },
+      });
+      this.heartbeat.start();
+    } else {
+      this.logger.info("Heartbeat disabled in config");
+    }
 
     // Start channels
     const onMessage = async (text: string) => {

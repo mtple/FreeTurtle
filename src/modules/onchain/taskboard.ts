@@ -147,36 +147,11 @@ const TASK_BOARD_ABI = [
 
 const TASK_STATUS = ["Open", "Completed", "Cancelled"] as const;
 
-/* ── Pending task previews (two-step creation) ────────────────────── */
-
-interface PendingPreview {
-  token: string;
-  description: string;
-  rewardEth: string;
-  approvalMode: string;
-  judgingCriteria?: string;
-  deadlineHours?: number;
-  createdAt: number; // timestamp for expiry
-}
-
-// In-memory map of preview tokens → pending task details
-// Tokens expire after 10 minutes
-const pendingPreviews = new Map<string, PendingPreview>();
-
-function cleanExpiredPreviews(): void {
-  const now = Date.now();
-  for (const [token, preview] of pendingPreviews) {
-    if (now - preview.createdAt > 10 * 60 * 1000) {
-      pendingPreviews.delete(token);
-    }
-  }
-}
-
 export const taskboardTools: ToolDefinition[] = [
   {
-    name: "preview_task",
+    name: "create_task",
     description:
-      "Preview a task before creating it onchain. This does NOT create the task — it returns a summary for the founder to review and confirm. You MUST call this first and show the summary to the founder. Only after the founder explicitly confirms should you call confirm_create_task with the returned preview_token.\n\nDo NOT call this tool until you have all required information from the founder. If any parameter is missing (description, reward, approval mode), ask the founder first.",
+      "Create a new task on the TaskBoard contract, funded with ETH from the CEO wallet. A unique email keyword is auto-generated — contributors must include it in their email subject line when submitting deliverables. If a required parameter is missing, ask the founder before calling.",
     input_schema: {
       type: "object",
       properties: {
@@ -203,21 +178,6 @@ export const taskboardTools: ToolDefinition[] = [
         },
       },
       required: ["description", "reward_eth", "approval_mode"],
-    },
-  },
-  {
-    name: "confirm_create_task",
-    description:
-      "Execute the onchain task creation after the founder has reviewed and confirmed the preview. Requires the preview_token returned by preview_task. Do NOT call this unless the founder has explicitly confirmed the task details shown in the preview.",
-    input_schema: {
-      type: "object",
-      properties: {
-        preview_token: {
-          type: "string",
-          description: "The preview_token returned by preview_task. This proves the founder saw and confirmed the details.",
-        },
-      },
-      required: ["preview_token"],
     },
   },
   {
@@ -333,18 +293,14 @@ export async function executeTaskboardTool(
 
   try {
     switch (name) {
-      case "preview_task":
-        return previewTask(
+      case "create_task":
+        return await createTask(
+          contractAddress,
           input.description as string,
           input.reward_eth as string,
           input.approval_mode as string,
           input.judging_criteria as string | undefined,
           input.deadline_hours as number | undefined,
-        );
-      case "confirm_create_task":
-        return await confirmCreateTask(
-          contractAddress,
-          input.preview_token as string,
           env,
           workspaceDir,
         );
@@ -402,58 +358,16 @@ export async function executeTaskboardTool(
   }
 }
 
-function previewTask(
+async function createTask(
+  contractAddress: `0x${string}`,
   description: string,
   rewardEth: string,
   approvalMode: string,
   judgingCriteria: string | undefined,
   deadlineHours: number | undefined,
-): string {
-  cleanExpiredPreviews();
-
-  const token = randomBytes(16).toString("hex");
-  pendingPreviews.set(token, {
-    token,
-    description,
-    rewardEth,
-    approvalMode,
-    judgingCriteria,
-    deadlineHours,
-    createdAt: Date.now(),
-  });
-
-  return JSON.stringify({
-    status: "PREVIEW — NOT YET CREATED",
-    preview_token: token,
-    summary: {
-      description,
-      reward_eth: rewardEth,
-      approval_mode: approvalMode,
-      judging_criteria: judgingCriteria || "none",
-      deadline_hours: deadlineHours || "none",
-    },
-    instructions: "Show the summary above to the founder. Only call confirm_create_task with the preview_token after the founder explicitly confirms. Tell the founder: after the task is created, contributors will submit via email with a unique keyword in the subject line, and they must include their Ethereum wallet address in the email body to receive payment.",
-  });
-}
-
-async function confirmCreateTask(
-  contractAddress: `0x${string}`,
-  previewToken: string,
   env: Record<string, string>,
   workspaceDir?: string,
 ): Promise<string> {
-  cleanExpiredPreviews();
-
-  const preview = pendingPreviews.get(previewToken);
-  if (!preview) {
-    return JSON.stringify({
-      error: true,
-      message: "Invalid or expired preview_token. Call preview_task first to get a new token.",
-    });
-  }
-  pendingPreviews.delete(previewToken);
-
-  const { description, rewardEth, approvalMode, judgingCriteria, deadlineHours } = preview;
   const { chain, account, walletClient, publicClient } = getClients(env);
 
   // Generate a unique email keyword for submission delivery

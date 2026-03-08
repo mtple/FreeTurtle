@@ -13,6 +13,11 @@ export type LLMProvider =
   | "openai_subscription"
   | "openrouter";
 
+export interface ConversationTurn {
+  userMessage: string;
+  assistantResponse: string;
+}
+
 export interface LLMClientOptions {
   provider: LLMProvider;
   model: string;
@@ -145,21 +150,24 @@ export class LLMClient {
     systemPrompt: string,
     userPrompt: string,
     tools: ToolDefinition[],
-    toolExecutor: ToolExecutor
-  ): Promise<string> {
+    toolExecutor: ToolExecutor,
+    priorHistory?: ConversationTurn[],
+  ): Promise<{ text: string; newTurns: ConversationTurn[] }> {
     if (this.provider === "anthropic") {
       return this.agentLoopAnthropic(
         systemPrompt,
         userPrompt,
         tools,
-        toolExecutor
+        toolExecutor,
+        priorHistory,
       );
     }
     return this.agentLoopOpenAI(
       systemPrompt,
       userPrompt,
       tools,
-      toolExecutor
+      toolExecutor,
+      priorHistory,
     );
   }
 
@@ -215,18 +223,30 @@ export class LLMClient {
     systemPrompt: string,
     userPrompt: string,
     tools: ToolDefinition[],
-    toolExecutor: ToolExecutor
-  ): Promise<string> {
+    toolExecutor: ToolExecutor,
+    priorHistory?: ConversationTurn[],
+  ): Promise<{ text: string; newTurns: ConversationTurn[] }> {
     const MAX_ITERATIONS = 25;
-    const messages: Anthropic.MessageParam[] = [
-      { role: "user", content: userPrompt },
-    ];
+    const messages: Anthropic.MessageParam[] = [];
+
+    // Prepend prior conversation history
+    if (priorHistory?.length) {
+      for (const turn of priorHistory) {
+        messages.push({ role: "user", content: turn.userMessage });
+        messages.push({ role: "assistant", content: turn.assistantResponse });
+      }
+    }
+
+    messages.push({ role: "user", content: userPrompt });
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await this.chatAnthropic(systemPrompt, messages, tools);
 
       if (response.tool_calls.length === 0) {
-        return response.text;
+        return {
+          text: response.text,
+          newTurns: [{ userMessage: userPrompt, assistantResponse: response.text }],
+        };
       }
 
       // Build assistant content blocks
@@ -259,7 +279,11 @@ export class LLMClient {
 
     // If we hit the limit, return whatever text we have
     const last = await this.chatAnthropic(systemPrompt, messages, []);
-    return last.text || "(Agent reached maximum tool call iterations)";
+    const text = last.text || "(Agent reached maximum tool call iterations)";
+    return {
+      text,
+      newTurns: [{ userMessage: userPrompt, assistantResponse: text }],
+    };
   }
 
   // --- OpenAI implementation ---
@@ -385,18 +409,30 @@ export class LLMClient {
     systemPrompt: string,
     userPrompt: string,
     tools: ToolDefinition[],
-    toolExecutor: ToolExecutor
-  ): Promise<string> {
+    toolExecutor: ToolExecutor,
+    priorHistory?: ConversationTurn[],
+  ): Promise<{ text: string; newTurns: ConversationTurn[] }> {
     const MAX_ITERATIONS = 25;
-    const messages: OpenAI.ChatCompletionMessageParam[] = [
-      { role: "user", content: userPrompt },
-    ];
+    const messages: OpenAI.ChatCompletionMessageParam[] = [];
+
+    // Prepend prior conversation history
+    if (priorHistory?.length) {
+      for (const turn of priorHistory) {
+        messages.push({ role: "user", content: turn.userMessage });
+        messages.push({ role: "assistant", content: turn.assistantResponse });
+      }
+    }
+
+    messages.push({ role: "user", content: userPrompt });
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await this.chatOpenAI(systemPrompt, messages, tools);
 
       if (response.tool_calls.length === 0) {
-        return response.text;
+        return {
+          text: response.text,
+          newTurns: [{ userMessage: userPrompt, assistantResponse: response.text }],
+        };
       }
 
       // Build assistant message with tool calls
@@ -427,7 +463,11 @@ export class LLMClient {
 
     // If we hit the limit, return whatever text we have
     const last = await this.chatOpenAI(systemPrompt, messages, []);
-    return last.text || "(Agent reached maximum tool call iterations)";
+    const text = last.text || "(Agent reached maximum tool call iterations)";
+    return {
+      text,
+      newTurns: [{ userMessage: userPrompt, assistantResponse: text }],
+    };
   }
 }
 

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadSoul } from "./soul.js";
 import { readMemoryFile, writeMemoryFile } from "./memory.js";
-import type { LLMClient } from "./llm.js";
+import type { LLMClient, ConversationTurn } from "./llm.js";
 import type {
   ToolDefinition,
   ToolCall,
@@ -40,6 +40,8 @@ export class TaskRunner {
   private approvalManager: ApprovalManager;
   private auditLogger: AuditLogger;
   private onApprovalNeeded?: ApprovalNotifier;
+  private conversationHistory = new Map<string, ConversationTurn[]>();
+  private static readonly MAX_HISTORY_TURNS = 10;
 
   constructor(
     dir: string,
@@ -78,12 +80,13 @@ export class TaskRunner {
     let errorMsg: string | undefined;
 
     try {
-      response = await this.llm.agentLoop(
+      const result = await this.llm.agentLoop(
         systemPrompt,
         task.prompt,
         tools,
-        executor
+        executor,
       );
+      response = result.text;
     } catch (err) {
       status = "error";
       errorMsg = err instanceof Error ? err.message : "Unknown error";
@@ -158,17 +161,27 @@ export class TaskRunner {
     const auditToolCalls: AuditToolCall[] = [];
     const executor = this.buildExecutor(randomUUID(), toolsCalled, auditToolCalls);
 
-    const response = await this.llm.agentLoop(
+    const history = this.conversationHistory.get(channel) ?? [];
+
+    const result = await this.llm.agentLoop(
       systemPrompt,
       message,
       tools,
-      executor
+      executor,
+      history,
     );
+
+    // Append new turns and trim to max
+    const updated = [...history, ...result.newTurns];
+    if (updated.length > TaskRunner.MAX_HISTORY_TURNS) {
+      updated.splice(0, updated.length - TaskRunner.MAX_HISTORY_TURNS);
+    }
+    this.conversationHistory.set(channel, updated);
 
     this.logger.info(
       `Replied to ${channel} (${toolsCalled.length} tool calls)`
     );
-    return response;
+    return result.text;
   }
 
   getApprovalManager(): ApprovalManager {
@@ -249,7 +262,7 @@ export class TaskRunner {
       "- Config changes (cron, modules, channels) take effect on next restart.",
       "",
       "## Task Workflow",
-      "- To create a task: first call preview_task to generate a summary, show it to the founder, and only call confirm_create_task after explicit approval.",
+      "- To create a task: call create_task with the details the founder provides. If a required parameter is missing, ask the founder before calling.",
       "- After a task is created, tell the founder the submission instructions: contributors email with the keyword in the subject and their ETH wallet address in the body.",
       "- Contributors submit via EMAIL only — they do NOT interact with the blockchain.",
       "- To review and pay out a task: call review_task_submissions, then search Gmail for the keyword, evaluate submissions, then YOU call submit_on_behalf_of(task_id, winner_wallet_address) to record the submission onchain, then YOU call approve_task_submission(task_id, submission_index) to release payment.",

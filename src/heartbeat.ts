@@ -55,9 +55,11 @@ export class Heartbeat {
       const result = await this.runner.runTask({
         name: "heartbeat",
         prompt:
-          "This is a scheduled heartbeat check. Review your heartbeat checklist. " +
-          "If everything looks fine, respond with exactly HEARTBEAT_OK. " +
-          "If something needs attention, describe what you found.",
+          "This is a scheduled heartbeat check. Review your heartbeat checklist if one exists. " +
+          "Do NOT proactively check email, search Gmail, scan for task submissions, or make any tool calls " +
+          "unless your heartbeat checklist explicitly instructs you to. " +
+          "If there is no checklist or nothing needs attention, respond with exactly HEARTBEAT_OK. " +
+          "Keep your response minimal to conserve resources.",
         isHeartbeat: true,
       });
 
