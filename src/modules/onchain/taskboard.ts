@@ -147,11 +147,36 @@ const TASK_BOARD_ABI = [
 
 const TASK_STATUS = ["Open", "Completed", "Cancelled"] as const;
 
+/* ── Pending task previews (two-step creation) ────────────────────── */
+
+interface PendingPreview {
+  token: string;
+  description: string;
+  rewardEth: string;
+  approvalMode: string;
+  judgingCriteria?: string;
+  deadlineHours?: number;
+  createdAt: number; // timestamp for expiry
+}
+
+// In-memory map of preview tokens → pending task details
+// Tokens expire after 10 minutes
+const pendingPreviews = new Map<string, PendingPreview>();
+
+function cleanExpiredPreviews(): void {
+  const now = Date.now();
+  for (const [token, preview] of pendingPreviews) {
+    if (now - preview.createdAt > 10 * 60 * 1000) {
+      pendingPreviews.delete(token);
+    }
+  }
+}
+
 export const taskboardTools: ToolDefinition[] = [
   {
-    name: "create_task",
+    name: "preview_task",
     description:
-      "Create a new task on the TaskBoard contract, funded with ETH from the CEO wallet. A unique email keyword is auto-generated — contributors must include it in their email subject line when submitting deliverables. When approval_mode is 'ceo', search Gmail for the keyword to find and evaluate submissions autonomously.\n\nIMPORTANT: This sends an onchain transaction and locks real ETH in escrow. NEVER assume or fill in missing parameters — if the founder has not explicitly specified the reward amount, approval mode, deadline, or judging criteria, you MUST ask before calling this tool. Before executing, always confirm the full details with the founder: description, reward ETH, approval mode, deadline, and judging criteria (if CEO-approved). Only proceed after explicit confirmation. Use the founder's exact words for the description and judging criteria — do not rephrase or substitute your own.",
+      "Preview a task before creating it onchain. This does NOT create the task — it returns a summary for the founder to review and confirm. You MUST call this first and show the summary to the founder. Only after the founder explicitly confirms should you call confirm_create_task with the returned preview_token.\n\nDo NOT call this tool until you have all required information from the founder. If any parameter is missing (description, reward, approval mode), ask the founder first.",
     input_schema: {
       type: "object",
       properties: {
@@ -161,23 +186,38 @@ export const taskboardTools: ToolDefinition[] = [
         },
         reward_eth: {
           type: "string",
-          description: 'ETH amount to fund (e.g. "0.001"). Must be explicitly provided by the founder — never assume a default.',
+          description: 'ETH amount to fund (e.g. "0.001"). Must be explicitly provided by the founder.',
         },
         approval_mode: {
           type: "string",
-          description: 'Who approves submissions — "ceo" or "founder". Must be explicitly specified by the founder.',
+          description: 'Who approves submissions — "ceo" or "founder". Must be explicitly specified.',
         },
         judging_criteria: {
           type: "string",
           description:
-            'When approval_mode is "ceo", the founder\'s natural-language description of what makes a good submission. Use the founder\'s exact words. The CEO uses this to autonomously evaluate and pick a winner.',
+            'When approval_mode is "ceo", the founder\'s natural-language description of what makes a good submission. Use the founder\'s exact words.',
         },
         deadline_hours: {
           type: "number",
-          description: "Hours until deadline. 0 or omitted = no deadline. Must be explicitly specified if desired.",
+          description: "Hours until deadline. 0 or omitted = no deadline.",
         },
       },
       required: ["description", "reward_eth", "approval_mode"],
+    },
+  },
+  {
+    name: "confirm_create_task",
+    description:
+      "Execute the onchain task creation after the founder has reviewed and confirmed the preview. Requires the preview_token returned by preview_task. Do NOT call this unless the founder has explicitly confirmed the task details shown in the preview.",
+    input_schema: {
+      type: "object",
+      properties: {
+        preview_token: {
+          type: "string",
+          description: "The preview_token returned by preview_task. This proves the founder saw and confirmed the details.",
+        },
+      },
+      required: ["preview_token"],
     },
   },
   {
@@ -231,7 +271,7 @@ export const taskboardTools: ToolDefinition[] = [
   {
     name: "submit_on_behalf_of",
     description:
-      "Submit a deliverable onchain on behalf of a contributor. Use this after reviewing an email submission — it records the contributor's address and a content hash onchain so that approve_task_submission can allocate the reward to them. The content hash should be the keccak256 of the email body or deliverable reference.",
+      "REQUIRED STEP after picking a task winner. Contributors submit via email, NOT onchain. The CEO must call this tool to record the winning contributor's submission onchain, then call approve_task_submission to release the reward. Never tell contributors to submit onchain themselves — the CEO handles all onchain submission via this tool.",
     input_schema: {
       type: "object",
       properties: {
@@ -251,7 +291,7 @@ export const taskboardTools: ToolDefinition[] = [
   {
     name: "review_task_submissions",
     description:
-      "Review all submissions for a CEO-approved task. Fetches the stored task description, judging criteria, onchain submissions, and corresponding email deliverables from Gmail. Returns everything needed for the CEO to evaluate submissions and pick a winner. After reviewing, call submit_on_behalf_of to record the winning submission onchain, then call approve_task_submission to allocate the reward.",
+      "Review all submissions for a CEO-approved task. Fetches the stored task details, judging criteria, and onchain submissions. After evaluating, you MUST: (1) call submit_on_behalf_of with the winner's wallet address to record their submission onchain, (2) call approve_task_submission to release the reward. Contributors submit via email only — the CEO records submissions onchain on their behalf. NEVER tell contributors to submit onchain themselves.",
     input_schema: {
       type: "object",
       properties: {
@@ -293,14 +333,18 @@ export async function executeTaskboardTool(
 
   try {
     switch (name) {
-      case "create_task":
-        return await createTask(
-          contractAddress,
+      case "preview_task":
+        return previewTask(
           input.description as string,
           input.reward_eth as string,
           input.approval_mode as string,
           input.judging_criteria as string | undefined,
           input.deadline_hours as number | undefined,
+        );
+      case "confirm_create_task":
+        return await confirmCreateTask(
+          contractAddress,
+          input.preview_token as string,
           env,
           workspaceDir,
         );
@@ -358,16 +402,58 @@ export async function executeTaskboardTool(
   }
 }
 
-async function createTask(
-  contractAddress: `0x${string}`,
+function previewTask(
   description: string,
   rewardEth: string,
   approvalMode: string,
   judgingCriteria: string | undefined,
   deadlineHours: number | undefined,
+): string {
+  cleanExpiredPreviews();
+
+  const token = randomBytes(16).toString("hex");
+  pendingPreviews.set(token, {
+    token,
+    description,
+    rewardEth,
+    approvalMode,
+    judgingCriteria,
+    deadlineHours,
+    createdAt: Date.now(),
+  });
+
+  return JSON.stringify({
+    status: "PREVIEW — NOT YET CREATED",
+    preview_token: token,
+    summary: {
+      description,
+      reward_eth: rewardEth,
+      approval_mode: approvalMode,
+      judging_criteria: judgingCriteria || "none",
+      deadline_hours: deadlineHours || "none",
+    },
+    instructions: "Show the summary above to the founder. Only call confirm_create_task with the preview_token after the founder explicitly confirms. Tell the founder: after the task is created, contributors will submit via email with a unique keyword in the subject line, and they must include their Ethereum wallet address in the email body to receive payment.",
+  });
+}
+
+async function confirmCreateTask(
+  contractAddress: `0x${string}`,
+  previewToken: string,
   env: Record<string, string>,
   workspaceDir?: string,
 ): Promise<string> {
+  cleanExpiredPreviews();
+
+  const preview = pendingPreviews.get(previewToken);
+  if (!preview) {
+    return JSON.stringify({
+      error: true,
+      message: "Invalid or expired preview_token. Call preview_task first to get a new token.",
+    });
+  }
+  pendingPreviews.delete(previewToken);
+
+  const { description, rewardEth, approvalMode, judgingCriteria, deadlineHours } = preview;
   const { chain, account, walletClient, publicClient } = getClients(env);
 
   // Generate a unique email keyword for submission delivery
@@ -426,12 +512,13 @@ async function createTask(
     explorerUrl: explorerTxUrl(chain, hash),
     chain: chain.name,
     submissionInstructions: [
-      `To submit your work for this task:`,
+      `IMPORTANT: Share these instructions with contributors:`,
       ``,
+      `To submit your work for this task:`,
       `1. Send an email to the CEO's Gmail address`,
       `2. Subject line MUST contain the keyword: ${keyword}`,
       `3. Include your Ethereum wallet address in the email body (this is where payment will be sent)`,
-      `4. Attach or paste your deliverable in the email body`,
+      `4. Attach or describe your deliverable in the email body`,
       ``,
       `Reward: ${rewardEth} ETH | Deadline: ${deadlineHours ? `${deadlineHours} hours` : "none"}`,
     ].join("\n"),
@@ -738,17 +825,19 @@ async function reviewTaskSubmissions(
     result.judgingCriteria = stored.judgingCriteria || "No specific criteria set — use your best judgment.";
     result.nextSteps = [
       `1. Search Gmail for emails matching: subject:${stored.emailKeyword}`,
-      "2. Read each email to review the deliverable content — contributors should include their ETH address",
+      "2. Read each email to review the deliverable content and extract the contributor's ETH wallet address",
       "3. Evaluate each submission against the judging criteria",
-      "4. Call submit_on_behalf_of with the task_id and the winning contributor's ETH address to record their submission onchain",
-      "5. Call approve_task_submission with the task_id and the submission_index returned from step 4",
+      "4. IMMEDIATELY call submit_on_behalf_of(task_id, winner_wallet_address) — YOU record the submission onchain, NOT the contributor",
+      "5. IMMEDIATELY call approve_task_submission(task_id, submission_index) with the index returned from step 4",
+      "IMPORTANT: Do NOT tell contributors to submit onchain. You handle all onchain operations on their behalf.",
     ];
   } else {
     result.description = "(not available — task was created in a previous session without local persistence)";
     result.nextSteps = [
       "1. Review the onchain submissions above, or search Gmail for email deliverables",
-      "2. Call submit_on_behalf_of with the task_id and the winning contributor's ETH address if not already submitted onchain",
-      "3. Call approve_task_submission with the task_id and the winning submission_index",
+      "2. IMMEDIATELY call submit_on_behalf_of(task_id, winner_wallet_address) — YOU record the submission onchain, NOT the contributor",
+      "3. IMMEDIATELY call approve_task_submission(task_id, submission_index) with the index returned from step 2",
+      "IMPORTANT: Do NOT tell contributors to submit onchain. You handle all onchain operations on their behalf.",
     ];
   }
 

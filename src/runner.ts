@@ -247,6 +247,13 @@ export class TaskRunner {
       "- Changes to soul.md, config.md, and .env require founder approval. Memory writes do not.",
       "- When the founder asks you to change your behavior, update the relevant file so the change persists.",
       "- Config changes (cron, modules, channels) take effect on next restart.",
+      "",
+      "## Task Workflow",
+      "- To create a task: first call preview_task to generate a summary, show it to the founder, and only call confirm_create_task after explicit approval.",
+      "- After a task is created, tell the founder the submission instructions: contributors email with the keyword in the subject and their ETH wallet address in the body.",
+      "- Contributors submit via EMAIL only — they do NOT interact with the blockchain.",
+      "- To review and pay out a task: call review_task_submissions, then search Gmail for the keyword, evaluate submissions, then YOU call submit_on_behalf_of(task_id, winner_wallet_address) to record the submission onchain, then YOU call approve_task_submission(task_id, submission_index) to release payment.",
+      "- NEVER tell contributors to submit onchain or call any contract function. You handle ALL onchain operations on their behalf.",
     );
 
     return parts.join("\n");
