@@ -1,6 +1,6 @@
 {
   "name": "freeturtle",
-  "version": "0.1.15",
+  "version": "0.1.17",
   "description": "An open-source framework for deploying autonomous AI CEOs that run onchain businesses.",
   "type": "module",
   "main": "dist/bin/freeturtle.js",

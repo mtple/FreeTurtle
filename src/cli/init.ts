@@ -8,6 +8,7 @@ import { connectFarcaster } from "./connect-farcaster.js";
 import { connectGmail } from "./connect-gmail.js";
 import { scanForSecrets, redactSecrets, condenseDocs } from "./intake.js";
 import { testTelegram, testGitHub, testDatabase, testOnchain } from "./connection-tests.js";
+import { runInstallService } from "./install-service.js";
 import { createWebhook, channelToUrl, type WebhookSubscription } from "../webhooks/neynar.js";
 
 const TURTLE = `
@@ -1038,19 +1039,46 @@ ${state.founderName}.
     p.log.info(`Connected: ${modules.join(", ")}`);
   }
 
+  // Install as a system service (launchd on macOS, systemd on Linux)
+  const installService = await p.confirm({
+    message: `Install ${state.ceoName} as a system service? (auto-starts on boot, restarts on crash)`,
+    initialValue: true,
+  });
+
+  if (p.isCancel(installService)) {
+    p.cancel("Setup cancelled.");
+    process.exit(0);
+  }
+
+  if (installService) {
+    try {
+      await runInstallService(dir);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      p.log.warn(`Could not install service: ${msg}`);
+      p.log.info("You can install it later with: freeturtle install-service");
+    }
+  }
+
   p.note(
     [
       "Config:   ~/.freeturtle/config.md",
       "Soul:     ~/.freeturtle/soul.md",
       "",
-      "Start:    freeturtle start",
-      "Chat:     freeturtle start --chat",
+      ...(installService
+        ? ["Your CEO is running as a system service."]
+        : [
+            "Start:    freeturtle start",
+            "Chat:     freeturtle start --chat",
+          ]),
       "Status:   freeturtle status",
     ].join("\n"),
     `${state.ceoName} is ready`
   );
 
-  p.log.info("Run `freeturtle start` to bring your CEO online.");
+  if (!installService) {
+    p.log.info("Run `freeturtle start` to bring your CEO online.");
+  }
 
   p.outro(`Go get 'em, ${state.ceoName}!`);
 }

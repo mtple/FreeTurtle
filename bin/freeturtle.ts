@@ -22,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.15");
+  .version("0.1.17");
 
 program
   .command("hello")
@@ -30,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.15");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.17");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
@@ -96,7 +96,7 @@ program
 
 program
   .command("install-service")
-  .description("Install FreeTurtle as a systemd user service (Linux)")
+  .description("Install FreeTurtle as a system service (launchd on macOS, systemd on Linux)")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
     const { runInstallService } = await import("../src/cli/install-service.js");
@@ -133,7 +133,34 @@ program
 
 const connect = program
   .command("connect")
-  .description("Connect external services");
+  .description("Connect external services (gmail, telegram, github, farcaster, database, onchain)");
+
+connect
+  .command("gmail")
+  .description("Connect Gmail for reading and sending emails")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { connectGmail } = await import("../src/cli/connect-gmail.js");
+    await connectGmail(opts.dir);
+  });
+
+connect
+  .command("telegram")
+  .description("Connect Telegram bot for messaging")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { connectTelegram } = await import("../src/cli/connect-telegram.js");
+    await connectTelegram(opts.dir);
+  });
+
+connect
+  .command("github")
+  .description("Connect GitHub for repository access")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { connectGitHub } = await import("../src/cli/connect-github.js");
+    await connectGitHub(opts.dir);
+  });
 
 connect
   .command("farcaster")
@@ -145,12 +172,21 @@ connect
   });
 
 connect
-  .command("gmail")
-  .description("Connect Gmail for reading and sending emails")
+  .command("database")
+  .description("Connect a Postgres database")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
-    const { connectGmail } = await import("../src/cli/connect-gmail.js");
-    await connectGmail(opts.dir);
+    const { connectDatabase } = await import("../src/cli/connect-database.js");
+    await connectDatabase(opts.dir);
+  });
+
+connect
+  .command("onchain")
+  .description("Connect an EVM RPC endpoint for onchain reads")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { connectOnchain } = await import("../src/cli/connect-onchain.js");
+    await connectOnchain(opts.dir);
   });
 
 program
