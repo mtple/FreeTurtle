@@ -140,30 +140,30 @@ export const taskboardTools: ToolDefinition[] = [
   {
     name: "create_task",
     description:
-      "Create a new task on the TaskBoard contract, funded with ETH from the CEO wallet. A unique email keyword is auto-generated — contributors must include it in their email subject line when submitting deliverables. When approval_mode is 'ceo', search Gmail for the keyword to find and evaluate submissions autonomously.",
+      "Create a new task on the TaskBoard contract, funded with ETH from the CEO wallet. A unique email keyword is auto-generated — contributors must include it in their email subject line when submitting deliverables. When approval_mode is 'ceo', search Gmail for the keyword to find and evaluate submissions autonomously.\n\nIMPORTANT: This sends an onchain transaction and locks real ETH in escrow. NEVER assume or fill in missing parameters — if the founder has not explicitly specified the reward amount, approval mode, deadline, or judging criteria, you MUST ask before calling this tool. Before executing, always confirm the full details with the founder: description, reward ETH, approval mode, deadline, and judging criteria (if CEO-approved). Only proceed after explicit confirmation. Use the founder's exact words for the description and judging criteria — do not rephrase or substitute your own.",
     input_schema: {
       type: "object",
       properties: {
         description: {
           type: "string",
-          description: "Clear description of the work to be done",
+          description: "Clear description of the work to be done. Use the founder's exact words — do not rephrase.",
         },
         reward_eth: {
           type: "string",
-          description: 'ETH amount to fund (e.g. "0.005")',
+          description: 'ETH amount to fund (e.g. "0.001"). Must be explicitly provided by the founder — never assume a default.',
         },
         approval_mode: {
           type: "string",
-          description: 'Who approves submissions — "ceo" or "founder"',
+          description: 'Who approves submissions — "ceo" or "founder". Must be explicitly specified by the founder.',
         },
         judging_criteria: {
           type: "string",
           description:
-            'When approval_mode is "ceo", the founder\'s natural-language description of what makes a good submission. The CEO uses this to autonomously evaluate and pick a winner. E.g. "Looking for thorough analysis with cited sources, clear actionable recommendations, and at least 3 alternative strategies compared."',
+            'When approval_mode is "ceo", the founder\'s natural-language description of what makes a good submission. Use the founder\'s exact words. The CEO uses this to autonomously evaluate and pick a winner.',
         },
         deadline_hours: {
           type: "number",
-          description: "Hours until deadline. 0 or omitted = no deadline.",
+          description: "Hours until deadline. 0 or omitted = no deadline. Must be explicitly specified if desired.",
         },
       },
       required: ["description", "reward_eth", "approval_mode"],
@@ -507,6 +507,9 @@ async function getOpenTasks(
           ? {
               description: stored.description,
               emailKeyword: stored.emailKeyword,
+              ...(stored.judgingCriteria
+                ? { judgingCriteria: stored.judgingCriteria }
+                : {}),
             }
           : {}),
         rewardEth: formatEther(taskData[1]),

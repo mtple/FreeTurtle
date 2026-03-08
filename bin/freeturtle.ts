@@ -22,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.19");
+  .version("0.1.20");
 
 program
   .command("hello")
@@ -30,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.19");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.20");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
@@ -88,10 +88,11 @@ program
 
 program
   .command("update")
-  .description("Update FreeTurtle to the latest version")
-  .action(async () => {
+  .description("Update FreeTurtle to the latest version and restart daemon if running")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
     const { runUpdate } = await import("../src/cli/update.js");
-    await runUpdate();
+    await runUpdate(opts.dir);
   });
 
 program
