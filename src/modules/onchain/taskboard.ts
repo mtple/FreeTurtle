@@ -72,6 +72,17 @@ const TASK_BOARD_ABI = [
     outputs: [],
   },
   {
+    name: "submitOnBehalfOf",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "taskId", type: "uint256" },
+      { name: "contentHash", type: "bytes32" },
+      { name: "contributor", type: "address" },
+    ],
+    outputs: [{ name: "submissionIndex", type: "uint256" }],
+  },
+  {
     name: "withdraw",
     type: "function",
     stateMutability: "nonpayable",
@@ -218,9 +229,29 @@ export const taskboardTools: ToolDefinition[] = [
     },
   },
   {
+    name: "submit_on_behalf_of",
+    description:
+      "Submit a deliverable onchain on behalf of a contributor. Use this after reviewing an email submission — it records the contributor's address and a content hash onchain so that approve_task_submission can allocate the reward to them. The content hash should be the keccak256 of the email body or deliverable reference.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "number", description: "The task ID" },
+        contributor_address: {
+          type: "string",
+          description: "The contributor's Ethereum address (from their email)",
+        },
+        content_hash: {
+          type: "string",
+          description: "keccak256 hash of the deliverable content (bytes32 hex string). If not provided, one will be generated from the contributor address and timestamp.",
+        },
+      },
+      required: ["task_id", "contributor_address"],
+    },
+  },
+  {
     name: "review_task_submissions",
     description:
-      "Review all submissions for a CEO-approved task. Fetches the stored task description, judging criteria, onchain submissions, and corresponding email deliverables from Gmail. Returns everything needed for the CEO to evaluate submissions and pick a winner. After reviewing, call approve_task_submission to approve the best one.",
+      "Review all submissions for a CEO-approved task. Fetches the stored task description, judging criteria, onchain submissions, and corresponding email deliverables from Gmail. Returns everything needed for the CEO to evaluate submissions and pick a winner. After reviewing, call submit_on_behalf_of to record the winning submission onchain, then call approve_task_submission to allocate the reward.",
     input_schema: {
       type: "object",
       properties: {
@@ -280,6 +311,14 @@ export async function executeTaskboardTool(
           input.submission_index as number,
           env,
         );
+      case "submit_on_behalf_of":
+        return await submitOnBehalfOf(
+          contractAddress,
+          input.task_id as number,
+          input.contributor_address as string,
+          input.content_hash as string | undefined,
+          env,
+        );
       case "cancel_task":
         return await cancelTask(
           contractAddress,
@@ -333,7 +372,7 @@ async function createTask(
 
   // Generate a unique email keyword for submission delivery
   const keyword = `TASK-${randomBytes(4).toString("hex").toUpperCase()}`;
-  const fullDescription = `${description}\n\nSubmit deliverables by email with subject keyword: ${keyword}`;
+  const fullDescription = `${description}\n\nSubmit deliverables by email with subject keyword: ${keyword}\nInclude your Ethereum address in the email body to receive payment.`;
 
   const descriptionHash = keccak256(toBytes(fullDescription));
   const deadline = deadlineHours
@@ -386,6 +425,16 @@ async function createTask(
     txHash: hash,
     explorerUrl: explorerTxUrl(chain, hash),
     chain: chain.name,
+    submissionInstructions: [
+      `To submit your work for this task:`,
+      ``,
+      `1. Send an email to the CEO's Gmail address`,
+      `2. Subject line MUST contain the keyword: ${keyword}`,
+      `3. Include your Ethereum wallet address in the email body (this is where payment will be sent)`,
+      `4. Attach or paste your deliverable in the email body`,
+      ``,
+      `Reward: ${rewardEth} ETH | Deadline: ${deadlineHours ? `${deadlineHours} hours` : "none"}`,
+    ].join("\n"),
   });
 }
 
@@ -432,6 +481,52 @@ async function approveTaskSubmission(
       "approved — contributor can now withdraw funds by calling withdraw() on the contract",
     txHash: hash,
     explorerUrl: explorerTxUrl(chain, hash),
+    chain: chain.name,
+  });
+}
+
+async function submitOnBehalfOf(
+  contractAddress: `0x${string}`,
+  taskId: number,
+  contributorAddress: string,
+  contentHash: string | undefined,
+  env: Record<string, string>,
+): Promise<string> {
+  const { chain, account, walletClient, publicClient } = getClients(env);
+
+  // Generate a content hash if not provided
+  const hash = contentHash
+    ? (contentHash as `0x${string}`)
+    : keccak256(toBytes(`${contributorAddress}-${taskId}-${Date.now()}`));
+
+  const txHash = await walletClient.writeContract({
+    chain,
+    account,
+    address: contractAddress,
+    abi: TASK_BOARD_ABI,
+    functionName: "submitOnBehalfOf",
+    args: [BigInt(taskId), hash, contributorAddress as `0x${string}`],
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+  // Get the new submission count to determine the index
+  const taskData = await publicClient.readContract({
+    address: contractAddress,
+    abi: TASK_BOARD_ABI,
+    functionName: "getTask",
+    args: [BigInt(taskId)],
+  });
+  const submissionIndex = Number(taskData[7]) - 1;
+
+  return JSON.stringify({
+    taskId,
+    submissionIndex,
+    contributor: contributorAddress,
+    contentHash: hash,
+    status: "submitted — now call approve_task_submission to approve this submission",
+    txHash,
+    explorerUrl: explorerTxUrl(chain, txHash),
     chain: chain.name,
   });
 }
@@ -643,15 +738,17 @@ async function reviewTaskSubmissions(
     result.judgingCriteria = stored.judgingCriteria || "No specific criteria set — use your best judgment.";
     result.nextSteps = [
       `1. Search Gmail for emails matching: subject:${stored.emailKeyword}`,
-      "2. Read each email to review the deliverable content",
+      "2. Read each email to review the deliverable content — contributors should include their ETH address",
       "3. Evaluate each submission against the judging criteria",
-      "4. Call approve_task_submission with the task_id and winning submission_index",
+      "4. Call submit_on_behalf_of with the task_id and the winning contributor's ETH address to record their submission onchain",
+      "5. Call approve_task_submission with the task_id and the submission_index returned from step 4",
     ];
   } else {
     result.description = "(not available — task was created in a previous session without local persistence)";
     result.nextSteps = [
-      "1. Review the onchain submissions above",
-      "2. Call approve_task_submission with the task_id and winning submission_index",
+      "1. Review the onchain submissions above, or search Gmail for email deliverables",
+      "2. Call submit_on_behalf_of with the task_id and the winning contributor's ETH address if not already submitted onchain",
+      "3. Call approve_task_submission with the task_id and the winning submission_index",
     ];
   }
 
