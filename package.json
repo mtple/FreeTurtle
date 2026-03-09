@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@coinbase/cdp-sdk": "^1.45.0",
     "@clack/prompts": "^1.1.0",
     "@farcaster/hub-nodejs": "^0.15.10",
     "@googleapis/gmail": "^16.1.1",

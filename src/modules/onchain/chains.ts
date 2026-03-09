@@ -3,11 +3,12 @@ import {
   createPublicClient,
   createWalletClient,
   http,
+  type Account,
   type Chain,
   type PublicClient,
   type WalletClient,
 } from "viem";
-import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { privateKeyToAccount } from "viem/accounts";
 
 const KNOWN_CHAINS: Record<number, Chain> = {
   46630: defineChain({
@@ -48,9 +49,15 @@ const KNOWN_CHAINS: Record<number, Chain> = {
 
 export interface TaskChainClients {
   chain: Chain;
-  account: PrivateKeyAccount;
+  account: Account;
   walletClient: WalletClient;
   publicClient: PublicClient;
+}
+
+let _cachedAccount: Account | null = null;
+
+export function setCachedAccount(account: Account): void {
+  _cachedAccount = account;
 }
 
 export function getTaskChain(env: Record<string, string>): Chain {
@@ -77,7 +84,7 @@ export function getTaskChain(env: Record<string, string>): Chain {
 
 export function getCeoAccount(
   env: Record<string, string>,
-): PrivateKeyAccount {
+): Account {
   const key = env.CEO_PRIVATE_KEY;
   if (!key) throw new Error("CEO_PRIVATE_KEY not set");
   return privateKeyToAccount(key as `0x${string}`);
@@ -85,7 +92,7 @@ export function getCeoAccount(
 
 export function getClients(env: Record<string, string>): TaskChainClients {
   const chain = getTaskChain(env);
-  const account = getCeoAccount(env);
+  const account = _cachedAccount ?? getCeoAccount(env);
   return {
     chain,
     account,
