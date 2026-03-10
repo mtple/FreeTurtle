@@ -9,6 +9,7 @@ import type {
   ToolCall,
   FreeTurtleModule,
 } from "./modules/types.js";
+import type { ClawHubModule } from "./modules/clawhub/index.js";
 import type { Logger } from "./logger.js";
 import type { PolicyConfig } from "./policy.js";
 import { PolicyDeniedError, requiresApproval } from "./policy.js";
@@ -269,7 +270,48 @@ export class TaskRunner {
       "- NEVER tell contributors to submit onchain or call any contract function. You handle ALL onchain operations on their behalf.",
     );
 
+    // Inject ClawHub skill catalog (mirrors OpenClaw's system-prompt injection)
+    const skillCatalog = this.buildSkillCatalog();
+    if (skillCatalog) {
+      parts.push("", skillCatalog);
+    }
+
     return parts.join("\n");
+  }
+
+  /**
+   * Build a compact skill catalog for the system prompt.
+   * Mirrors how OpenClaw injects a brief XML-style list of available skills so
+   * the LLM knows it can call read_skill_instructions / run_skill_command.
+   */
+  private buildSkillCatalog(): string | null {
+    const clawHub = this.modules.find(
+      (m): m is ClawHubModule => m.name === "clawhub",
+    ) as ClawHubModule | undefined;
+
+    if (!clawHub) return null;
+
+    const skills = clawHub.getLoadedSkills();
+    if (skills.length === 0) return null;
+
+    const lines: string[] = [
+      "## ClawHub Skills",
+      `You have ${skills.length} ClawHub skill(s) installed. These are community-built capabilities from the OpenClaw ecosystem.`,
+      "Use `read_skill_instructions` to read a skill's full instructions before using it.",
+      "Use `run_skill_command` to execute CLI commands that a skill requires.",
+      "",
+      "<skills>",
+    ];
+
+    for (const skill of skills) {
+      const emoji = skill.meta.emoji ?? "";
+      lines.push(
+        `<skill name="${skill.meta.name}" description="${skill.meta.description}"${emoji ? ` emoji="${emoji}"` : ""} />`,
+      );
+    }
+
+    lines.push("</skills>");
+    return lines.join("\n");
   }
 
   private collectTools(): ToolDefinition[] {

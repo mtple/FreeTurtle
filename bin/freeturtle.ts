@@ -190,6 +190,37 @@ connect
     await connectOnchain(opts.dir);
   });
 
+const skills = program
+  .command("skills")
+  .description("Manage ClawHub / OpenClaw skills");
+
+skills
+  .command("install <slug>")
+  .description("Install a skill from ClawHub (e.g. 'todoist-cli')")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (slug, opts) => {
+    const { installSkill } = await import("../src/cli/skills.js");
+    await installSkill(opts.dir, slug);
+  });
+
+skills
+  .command("list")
+  .description("List installed ClawHub skills")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { listSkills } = await import("../src/cli/skills.js");
+    await listSkills(opts.dir);
+  });
+
+skills
+  .command("remove <name>")
+  .description("Remove an installed skill")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (name, opts) => {
+    const { removeSkill } = await import("../src/cli/skills.js");
+    await removeSkill(opts.dir, name);
+  });
+
 program
   .command("webhooks")
   .description("Set up Neynar webhooks for Farcaster mentions")
