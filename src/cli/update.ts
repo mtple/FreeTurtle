@@ -1,5 +1,4 @@
 import { execSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -54,26 +53,6 @@ function stopDaemon(pid: number): void {
   }
 }
 
-function startDaemon(dir: string): void {
-  // Resolve the freeturtle binary from the *newly installed* version, not the
-  // currently-running process.  `which freeturtle` always returns the global
-  // bin shim, which now points to the updated package.
-  let bin: string;
-  try {
-    bin = execSync("which freeturtle", { encoding: "utf-8" }).trim();
-  } catch {
-    // Fallback: try resolving relative to this file (pre-update path)
-    bin = join(__dirname, "../../bin/freeturtle.js");
-  }
-
-  // Use spawn(…, { detached: true }) via nohup + shell to ensure the child
-  // survives after this process exits.  execSync with & is unreliable because
-  // the backgrounded child can be killed when the parent shell exits.
-  const escaped = dir.replace(/'/g, "'\\''");
-  execSync(`nohup ${bin} start --dir '${escaped}' </dev/null >/dev/null 2>&1 &`, {
-    shell: "/bin/sh",
-  });
-}
 
 export async function runUpdate(dir?: string): Promise<void> {
   const workspaceDir = dir ?? join(homedir(), ".freeturtle");
@@ -109,9 +88,26 @@ export async function runUpdate(dir?: string): Promise<void> {
   if (daemonPid) {
     console.log("\nRestarting daemon...");
     try {
-      startDaemon(workspaceDir);
+      // Resolve the *newly installed* binary so we launch the updated code,
+      // not the code from the process that's currently running.
+      let bin: string;
+      try {
+        bin = execSync("which freeturtle", { encoding: "utf-8" }).trim();
+      } catch {
+        bin = "freeturtle";
+      }
+
+      // Use the new binary's start command directly via nohup.
+      // This ensures the new version's daemon code runs, avoiding the
+      // "old code restarts old daemon" race condition.
+      const escaped = workspaceDir.replace(/'/g, "'\\''");
+      execSync(
+        `nohup ${bin} start --dir '${escaped}' </dev/null >/dev/null 2>&1 &`,
+        { shell: "/bin/sh" },
+      );
+
       // Give it a moment to write PID
-      execSync("sleep 1");
+      execSync("sleep 2");
       const newPid = getDaemonPid(workspaceDir);
       if (newPid) {
         console.log(`Daemon restarted (PID ${newPid}).`);
