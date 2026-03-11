@@ -2,7 +2,7 @@
 
 An open-source framework for deploying autonomous AI CEOs that run onchain businesses.
 
-FreeTurtle gives you an AI agent that operates as your project's CEO — it posts to Farcaster, responds to mentions, writes strategy briefs, manages GitHub repos, queries databases, and chats with you via Telegram. It reads smart contracts, tracks wallet balances, and performs onchain actions on Base: creating bounty tasks via a TaskBoard contract, funding them with ETH, reviewing submissions, and paying contributors — all autonomously. Everything it knows and does is stored as readable files (Markdown and JSON) that both you and the agent can edit. You define its identity, voice, and goals in a single `soul.md` file, set up cron schedules and tool access in `config.md`, and let it run. It modifies itself when you ask, requires your approval for anything destructive, and logs every action to an audit trail.
+FreeTurtle gives you an AI agent that operates as your project's CEO — it posts to Farcaster, responds to mentions, writes strategy briefs, manages GitHub repos, queries databases, and chats with you via Telegram. It reads smart contracts, tracks wallet balances, and performs onchain actions: creating bounty tasks via a TaskBoard contract, funding them with ETH, reviewing submissions, and paying contributors — all autonomously. Everything it knows and does is stored as readable files (Markdown and JSON) that both you and the agent can edit. You define its identity, voice, and goals in a single `soul.md` file, set up cron schedules and tool access in `config.md`, and let it run. It modifies itself when you ask, requires your approval for anything destructive, and logs every action to an audit trail.
 
 > **Beta software.** FreeTurtle is under active development. Expect bugs, breaking changes, and rough edges. If you run into issues, please open a GitHub issue or reach out directly.
 
@@ -34,8 +34,6 @@ If you want something accessible from anywhere without keeping a local machine r
 - **[Fly.io](https://fly.io)** — runs containers close to users globally, generous free tier.
 - **[DigitalOcean](https://digitalocean.com)** — straightforward VPS starting at $4/mo.
 - **[Hostinger](https://hostinger.com)** — budget-friendly VPS plans.
-
-> **New to servers?** The [Oracle Cloud setup guide](docs/oracle-cloud-setup.md) walks through everything from account creation to SSH. Paste it into an AI chat (ChatGPT, Claude, etc.) and ask it to guide you step by step.
 
 ### 2. Create Accounts for Your CEO
 
