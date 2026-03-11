@@ -2,11 +2,38 @@
 
 An open-source framework for deploying autonomous AI CEOs that run onchain businesses.
 
+FreeTurtle gives you an AI agent that operates as your project's CEO — it posts to Farcaster, responds to mentions, writes strategy briefs, manages GitHub repos, queries databases, and chats with you via Telegram. It reads smart contracts, tracks wallet balances, and performs onchain actions on Base: creating bounty tasks via a TaskBoard contract, funding them with ETH, reviewing submissions, and paying contributors — all autonomously. Everything it knows and does is stored as readable files (Markdown and JSON) that both you and the agent can edit. You define its identity, voice, and goals in a single `soul.md` file, set up cron schedules and tool access in `config.md`, and let it run. It modifies itself when you ask, requires your approval for anything destructive, and logs every action to an audit trail.
+
+> **Beta software.** FreeTurtle is under active development. Expect bugs, breaking changes, and rough edges. If you run into issues, please open a GitHub issue or reach out directly.
+
+## Contact
+
+- **X:** [@mattleefc](https://x.com/mattleefc)
+- **Farcaster:** [@mattlee](https://warpcast.com/mattlee)
+
 ## Getting Started
 
 ### 1. Set Up a Server
 
-You need a Linux server that runs 24/7. We recommend [Oracle Cloud's free ARM instance](docs/oracle-cloud-setup.md) — 2 CPUs, 12 GB RAM, always free.
+FreeTurtle is a long-running daemon — it needs a machine that stays on 24/7.
+
+#### Local (recommended for getting started)
+
+Run FreeTurtle on hardware you already own. No cloud account needed, no ongoing costs, and your data stays on your machine.
+
+- **Your existing Mac or Linux machine** — just leave it running. Works great for testing or if your machine is always on.
+- **Raspberry Pi** — a $35-80 single-board computer that runs headless, draws ~5W of power, and is perfect for always-on daemons. A Pi 4 (4GB+) or Pi 5 handles FreeTurtle easily. Install the 64-bit Raspberry Pi OS Lite, plug in ethernet, and SSH in.
+- **Any old laptop or desktop** — install Ubuntu Server and repurpose it as a dedicated FreeTurtle box.
+
+#### Cloud
+
+If you want something accessible from anywhere without keeping a local machine running:
+
+- **[Oracle Cloud](docs/oracle-cloud-setup.md)** — 2 CPUs, 12 GB RAM, always free ARM instance. Our [setup guide](docs/oracle-cloud-setup.md) walks through everything from account creation to SSH.
+- **[Railway](https://railway.app)** — deploy from a repo or Dockerfile, easy scaling, free trial available.
+- **[Fly.io](https://fly.io)** — runs containers close to users globally, generous free tier.
+- **[DigitalOcean](https://digitalocean.com)** — straightforward VPS starting at $4/mo.
+- **[Hostinger](https://hostinger.com)** — budget-friendly VPS plans.
 
 > **New to servers?** The [Oracle Cloud setup guide](docs/oracle-cloud-setup.md) walks through everything from account creation to SSH. Paste it into an AI chat (ChatGPT, Claude, etc.) and ask it to guide you step by step.
 
@@ -38,7 +65,7 @@ freeturtle init
 # Start the daemon
 freeturtle start
 
-# Keep it running after reboot (Linux)
+# Keep it running after reboot (macOS or Linux)
 freeturtle install-service
 ```
 
@@ -54,20 +81,6 @@ The quickest path:
 3. Run `freeturtle webhooks` to register with Neynar
 
 See the [Oracle Cloud setup guide](docs/oracle-cloud-setup.md#setting-up-webhooks-farcaster-mentionsreplies) for full instructions.
-
-## What It Does
-
-FreeTurtle gives you an autonomous AI CEO that:
-
-- **Modifies itself** — updates its own identity, voice, goals, config, and memory when you ask
-- **Posts to Farcaster** on a schedule (or on demand)
-- **Listens for mentions** via webhooks and auto-replies
-- **Chats with you** via Terminal or Telegram
-- **Writes strategy briefs** weekly
-- **Queries databases** (read-only Postgres)
-- **Creates GitHub issues, writes code and submits pull requests**
-- **Reads onchain data** (balances, contracts, transactions on Base)
-- **Stores identity and memory** as readable Markdown and JSON files
 
 ## How It Works
 
@@ -137,8 +150,9 @@ freeturtle webhooks          # Set up Neynar webhooks (mentions, replies, watche
 freeturtle approvals         # List pending approval requests
 freeturtle approve <id>      # Approve a pending action
 freeturtle reject <id>       # Reject a pending action
+freeturtle health            # Verify daemon is healthy
 freeturtle update            # Update to the latest version
-freeturtle install-service   # Install as a systemd service (Linux)
+freeturtle install-service   # Install as a system service (launchd on macOS, systemd on Linux)
 ```
 
 ## Modules
@@ -424,7 +438,7 @@ Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it 
 
 ### Cloud Provider Access
 
-Your cloud provider (Oracle, AWS, GCP) has full access to the underlying infrastructure — they can technically read any file on your VM. This is true of all cloud computing and is covered by their terms of service. For most use cases this is fine. If this is unacceptable for your threat model, run FreeTurtle on hardware you physically control.
+Your cloud provider (Oracle, Railway, Fly.io, DigitalOcean, etc.) has full access to the underlying infrastructure — they can technically read any file on your VM. This is true of all cloud computing and is covered by their terms of service. For most use cases this is fine. If this is unacceptable for your threat model, run FreeTurtle on hardware you physically control (e.g. a Raspberry Pi or a spare laptop).
 
 ## The Two-Turtle Vision (v0.2)
 

@@ -5,6 +5,7 @@ import type {
   ToolCall,
   ToolExecutor,
 } from "./modules/types.js";
+import { withRetry } from "./reliability.js";
 
 export type LLMProvider =
   | "claude_api"
@@ -152,6 +153,7 @@ export class LLMClient {
     tools: ToolDefinition[],
     toolExecutor: ToolExecutor,
     priorHistory?: ConversationTurn[],
+    images?: import("./channels/types.js").MessageImage[],
   ): Promise<{ text: string; newTurns: ConversationTurn[] }> {
     if (this.provider === "anthropic") {
       return this.agentLoopAnthropic(
@@ -160,6 +162,7 @@ export class LLMClient {
         tools,
         toolExecutor,
         priorHistory,
+        images,
       );
     }
     return this.agentLoopOpenAI(
@@ -185,21 +188,25 @@ export class LLMClient {
         ].join("\n\n")
       : systemPrompt;
 
-    const response = await this.anthropic!.messages.create({
-      model: this.model,
-      max_tokens: 4096,
-      system: effectiveSystemPrompt,
-      messages,
-      ...(tools?.length
-        ? {
-            tools: tools.map((t) => ({
-              name: t.name,
-              description: t.description,
-              input_schema: t.input_schema as Anthropic.Tool["input_schema"],
-            })),
-          }
-        : {}),
-    });
+    const response = await withRetry(
+      () =>
+        this.anthropic!.messages.create({
+          model: this.model,
+          max_tokens: 4096,
+          system: effectiveSystemPrompt,
+          messages,
+          ...(tools?.length
+            ? {
+                tools: tools.map((t) => ({
+                  name: t.name,
+                  description: t.description,
+                  input_schema: t.input_schema as Anthropic.Tool["input_schema"],
+                })),
+              }
+            : {}),
+        }),
+      { maxRetries: 3, baseDelayMs: 2000, maxDelayMs: 60000, timeoutMs: 120000 },
+    );
 
     let text = "";
     const toolCalls: ToolCall[] = [];
@@ -225,6 +232,7 @@ export class LLMClient {
     tools: ToolDefinition[],
     toolExecutor: ToolExecutor,
     priorHistory?: ConversationTurn[],
+    images?: import("./channels/types.js").MessageImage[],
   ): Promise<{ text: string; newTurns: ConversationTurn[] }> {
     const MAX_ITERATIONS = 25;
     const messages: Anthropic.MessageParam[] = [];
@@ -237,7 +245,24 @@ export class LLMClient {
       }
     }
 
-    messages.push({ role: "user", content: userPrompt });
+    // Build user message with optional images
+    if (images?.length) {
+      const content: Anthropic.ContentBlockParam[] = [];
+      for (const img of images) {
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            data: img.data,
+          },
+        });
+      }
+      content.push({ type: "text", text: userPrompt });
+      messages.push({ role: "user", content });
+    } else {
+      messages.push({ role: "user", content: userPrompt });
+    }
 
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await this.chatAnthropic(systemPrompt, messages, tools);

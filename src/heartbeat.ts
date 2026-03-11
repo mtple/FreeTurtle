@@ -4,10 +4,12 @@ import type { Logger } from "./logger.js";
 export class Heartbeat {
   private interval: number;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private runner: TaskRunner;
   private logger: Logger;
   private onAlert?: (message: string) => void;
   private running = false;
+  private lastTickTimeMs = 0;
 
   constructor(
     runner: TaskRunner,
@@ -28,17 +30,39 @@ export class Heartbeat {
       `Heartbeat started (every ${Math.round(this.interval / 1000)}s)`
     );
 
+    this.lastTickTimeMs = Date.now();
+
     this.timer = setInterval(() => {
       this.tick().catch((err) => {
         this.logger.error(`Heartbeat tick error: ${err instanceof Error ? err.message : err}`);
       });
     }, this.interval);
+
+    // Drift detection watchdog: checks every 10s for stale timers.
+    // Node.js setTimeout/setInterval don't account for macOS sleep/wake,
+    // so timers can stall permanently. This detects when the interval has
+    // been missed (e.g. after system wake) and triggers an immediate tick.
+    this.watchdogTimer = setInterval(() => {
+      const elapsed = Date.now() - this.lastTickTimeMs;
+      if (elapsed > this.interval + 5000) {
+        this.logger.warn(
+          `Heartbeat drift detected (${Math.round(elapsed / 1000)}s since last tick, expected ${Math.round(this.interval / 1000)}s). Triggering immediate heartbeat.`
+        );
+        this.tick().catch((err) => {
+          this.logger.error(`Heartbeat drift recovery error: ${err instanceof Error ? err.message : err}`);
+        });
+      }
+    }, 10_000);
   }
 
   stop(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
     this.logger.info("Heartbeat stopped");
   }
@@ -75,6 +99,7 @@ export class Heartbeat {
       this.logger.error(`Heartbeat failed: ${msg}`);
     } finally {
       this.running = false;
+      this.lastTickTimeMs = Date.now();
     }
   }
 }

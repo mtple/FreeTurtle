@@ -78,6 +78,30 @@ program
   });
 
 program
+  .command("health")
+  .description("Check daemon health")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    try {
+      const { ipcRequest } = await import("../src/cli/status.js");
+      const response = await ipcRequest(join(opts.dir, "daemon.sock"), "health");
+      const health = JSON.parse(response);
+      const color = health.status === "ok" ? "\x1b[32m" : "\x1b[31m";
+      console.log(`\n  ${color}${health.status.toUpperCase()}\x1b[0m\n`);
+      console.log(`  PID        ${health.pid}`);
+      console.log(`  Uptime     ${Math.round(health.uptime)}s`);
+      console.log(`  Memory     ${health.memoryMB} MB`);
+      console.log(`  Runner     ${health.runner ? "ready" : "not initialized"}`);
+      console.log(`  Channels   ${health.channels.join(", ") || "none"}`);
+      console.log(`  Heartbeat  ${health.heartbeat ? "active" : "off"}`);
+      console.log();
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+  });
+
+program
   .command("send <message>")
   .description("Send a message to the running CEO")
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)

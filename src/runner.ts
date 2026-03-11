@@ -152,7 +152,7 @@ export class TaskRunner {
     return { response, toolsCalled, durationMs };
   }
 
-  async runMessage(message: string, channel: string): Promise<string> {
+  async runMessage(message: string, channel: string, images?: import("./channels/types.js").MessageImage[]): Promise<string> {
     this.logger.info(`Message from ${channel}: ${message.slice(0, 100)}`);
 
     const systemPrompt = await this.buildSystemPrompt(false);
@@ -169,6 +169,7 @@ export class TaskRunner {
       tools,
       executor,
       history,
+      images,
     );
 
     // Append new turns and trim to max

@@ -20,6 +20,9 @@ import {
 } from "./oauth/store.js";
 
 function isTransientNetworkError(err: Error): boolean {
+  // AbortError from fetch() during shutdown
+  if (err.name === "AbortError") return true;
+
   const msg = err.message.toLowerCase();
   const cause = err.cause instanceof Error ? err.cause.message.toLowerCase() : "";
   const patterns = [
@@ -49,6 +52,8 @@ export class FreeTurtleDaemon {
   private runner?: TaskRunner;
   private ipcServer?: net.Server;
   private webhookServer?: WebhookServer;
+  private shuttingDown = false;
+  private watchdogTimer?: ReturnType<typeof setInterval>;
 
   constructor(dir: string, options: DaemonOptions = {}) {
     this.dir = dir;
@@ -150,8 +155,8 @@ export class FreeTurtleDaemon {
     }
 
     // Start channels
-    const onMessage = async (text: string) => {
-      return this.runner!.runMessage(text, "channel");
+    const onMessage = async (text: string, images?: import("./channels/types.js").MessageImage[]) => {
+      return this.runner!.runMessage(text, "channel", images);
     };
 
     if (this.options.chat) {
@@ -205,6 +210,7 @@ export class FreeTurtleDaemon {
 
     // Signal handlers
     const shutdown = async () => {
+      this.shuttingDown = true;
       this.logger.info("Shutting down...");
       await this.stop();
       process.exit(0);
@@ -212,6 +218,8 @@ export class FreeTurtleDaemon {
     process.on("SIGINT", () => { shutdown().catch((e) => this.logger.error(`Shutdown error: ${e}`)); });
     process.on("SIGTERM", () => { shutdown().catch((e) => this.logger.error(`Shutdown error: ${e}`)); });
     process.on("uncaughtException", (err) => {
+      // Suppress all errors during shutdown (pending fetches, torn-down resources)
+      if (this.shuttingDown) return;
       if (isTransientNetworkError(err)) {
         this.logger.warn(`Transient network error (ignored): ${err.message}`);
         return;
@@ -219,6 +227,7 @@ export class FreeTurtleDaemon {
       this.logger.error(`Uncaught exception: ${err.message}`);
     });
     process.on("unhandledRejection", (reason) => {
+      if (this.shuttingDown) return;
       const err = reason instanceof Error ? reason : new Error(String(reason));
       if (isTransientNetworkError(err)) {
         this.logger.warn(`Transient network error (ignored): ${err.message}`);
@@ -253,11 +262,34 @@ export class FreeTurtleDaemon {
   \x1b[2mfreeturtle send "message"  — talk to your CEO\x1b[0m
   \x1b[2mfreeturtle start --chat   — interactive mode\x1b[0m
   \x1b[2mfreeturtle status         — check on things\x1b[0m
+  \x1b[2mfreeturtle health         — verify daemon is healthy\x1b[0m
   \x1b[2mCtrl+C                    — stop\x1b[0m
 `);
+
+    // systemd watchdog integration (Linux only)
+    // Sends READY=1 on startup and WATCHDOG=1 every 30s via the NOTIFY_SOCKET.
+    // WatchdogSec=90 in the unit file means 3 missed pings trigger a restart.
+    if (process.platform === "linux" && process.env.NOTIFY_SOCKET) {
+      try {
+        const notifySocket = process.env.NOTIFY_SOCKET;
+        const sendSdNotify = (msg: string) => {
+          const conn = net.createConnection({ path: notifySocket }, () => {
+            conn.end(msg);
+          });
+          conn.on("error", () => {}); // ignore errors
+        };
+        sendSdNotify("READY=1");
+        this.watchdogTimer = setInterval(() => sendSdNotify("WATCHDOG=1"), 30_000);
+        this.watchdogTimer.unref();
+        this.logger.info("systemd watchdog active (30s interval)");
+      } catch {
+        this.logger.warn("Failed to initialize systemd watchdog");
+      }
+    }
   }
 
   async stop(): Promise<void> {
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     this.scheduler?.stop();
     this.heartbeat?.stop();
     for (const ch of this.channels) {
@@ -321,6 +353,22 @@ export class FreeTurtleDaemon {
         channels: this.channels.map((c) => c.name),
       };
       return JSON.stringify(status, null, 2);
+    }
+
+    if (command === "health") {
+      const health: Record<string, unknown> = {
+        status: "ok",
+        pid: process.pid,
+        uptime: process.uptime(),
+        memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        runner: !!this.runner,
+        channels: this.channels.map((c) => c.name),
+        scheduler: this.scheduler?.getStatus() ?? null,
+        heartbeat: !!this.heartbeat,
+        timestamp: new Date().toISOString(),
+      };
+      if (!this.runner) health.status = "degraded";
+      return JSON.stringify(health, null, 2);
     }
 
     if (command.startsWith("send ")) {

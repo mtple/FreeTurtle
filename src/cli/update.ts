@@ -55,10 +55,22 @@ function stopDaemon(pid: number): void {
 }
 
 function startDaemon(dir: string): void {
-  const nodePath = execSync("which node", { encoding: "utf-8" }).trim();
-  const bin = join(__dirname, "../../bin/freeturtle.js");
-  execSync(`${nodePath} ${bin} start --dir ${dir} &`, {
-    stdio: "ignore",
+  // Resolve the freeturtle binary from the *newly installed* version, not the
+  // currently-running process.  `which freeturtle` always returns the global
+  // bin shim, which now points to the updated package.
+  let bin: string;
+  try {
+    bin = execSync("which freeturtle", { encoding: "utf-8" }).trim();
+  } catch {
+    // Fallback: try resolving relative to this file (pre-update path)
+    bin = join(__dirname, "../../bin/freeturtle.js");
+  }
+
+  // Use spawn(…, { detached: true }) via nohup + shell to ensure the child
+  // survives after this process exits.  execSync with & is unreliable because
+  // the backgrounded child can be killed when the parent shell exits.
+  const escaped = dir.replace(/'/g, "'\\''");
+  execSync(`nohup ${bin} start --dir '${escaped}' </dev/null >/dev/null 2>&1 &`, {
     shell: "/bin/sh",
   });
 }

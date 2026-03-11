@@ -16,7 +16,10 @@ Description=FreeTurtle AI CEO
 After=network.target
 
 [Service]
+Type=notify
+NotifyAccess=all
 ExecStart=${nodePath} ${freeturtleBin} start --dir ${dir}
+WatchdogSec=90
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
@@ -80,10 +83,13 @@ function getLaunchdPlist(dir: string): string {
   <true/>
 
   <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key>
-    <false/>
-  </dict>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <key>ExitTimeOut</key>
+  <integer>15</integer>
 
   <key>StandardOutPath</key>
   <string>${logDir}/stdout.log</string>

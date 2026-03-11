@@ -1,5 +1,5 @@
 import { Bot } from "grammy";
-import type { Channel } from "./types.js";
+import type { Channel, MessageImage } from "./types.js";
 
 export class TelegramChannel implements Channel {
   name = "telegram";
@@ -11,7 +11,51 @@ export class TelegramChannel implements Channel {
     this.ownerId = ownerId;
   }
 
-  async start(onMessage: (text: string) => Promise<string>): Promise<void> {
+  async start(onMessage: (text: string, images?: MessageImage[]) => Promise<string>): Promise<void> {
+    // Handle photo messages
+    this.bot.on("message:photo", async (ctx) => {
+      const senderId = ctx.from?.id;
+      if (senderId !== this.ownerId) {
+        await ctx.reply("Sorry, I only talk to my founder.");
+        return;
+      }
+
+      try {
+        // Get the largest photo (last in array)
+        const photos = ctx.message.photo;
+        const largest = photos[photos.length - 1];
+        const file = await ctx.api.getFile(largest.file_id);
+
+        // Download the file as a buffer
+        const url = `https://api.telegram.org/file/bot${this.bot.token}/${file.file_path}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Failed to download photo: ${res.status}`);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const base64 = buffer.toString("base64");
+
+        // Determine media type from file extension
+        const ext = file.file_path?.split(".").pop()?.toLowerCase() ?? "jpg";
+        const mimeMap: Record<string, string> = {
+          jpg: "image/jpeg",
+          jpeg: "image/jpeg",
+          png: "image/png",
+          gif: "image/gif",
+          webp: "image/webp",
+        };
+        const mediaType = mimeMap[ext] ?? "image/jpeg";
+
+        const caption = ctx.message.caption ?? "What's in this image?";
+        const images: MessageImage[] = [{ data: base64, mediaType }];
+
+        const response = await onMessage(caption, images);
+        await ctx.reply(response);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        await ctx.reply(`Error: ${msg}`);
+      }
+    });
+
+    // Handle text messages
     this.bot.on("message:text", async (ctx) => {
       const senderId = ctx.from?.id;
       if (senderId !== this.ownerId) {
