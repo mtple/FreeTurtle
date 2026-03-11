@@ -5,6 +5,7 @@ import { config as loadDotenv } from "dotenv";
 import { loadConfig } from "./config.js";
 import { LLMClient, type LLMProvider } from "./llm.js";
 import { loadModules } from "./modules/loader.js";
+import { loadSkills } from "./skills/index.js";
 import { TaskRunner } from "./runner.js";
 import { Scheduler } from "./scheduler.js";
 import { Heartbeat } from "./heartbeat.js";
@@ -121,9 +122,13 @@ export class FreeTurtleDaemon {
       `Modules: ${modules.map((m) => m.name).join(", ") || "none"}`
     );
 
-    // Create runner with policy and approval notifications
+    // Load Agent Skills (OpenClaw / ClawHub / Claude Code compatible)
+    const skills = await loadSkills(this.dir, config.skills, this.logger);
+
+    // Create runner with policy, skills, and approval notifications
     this.runner = new TaskRunner(this.dir, llm, modules, this.logger, {
       policy: config.policy,
+      skills,
       onApprovalNeeded: (msg) => {
         this.logger.info(`Approval notification: ${msg.slice(0, 100)}`);
         for (const ch of this.channels) {
@@ -295,6 +300,7 @@ export class FreeTurtleDaemon {
     this.logger.info("FreeTurtle is running");
 
     const moduleNames = modules.map((m) => m.name).join(", ") || "none";
+    const skillNames = skills.length > 0 ? skills.map((s) => s.name).join(", ") : "none";
     const channelNames = this.channels.map((c) => c.name).join(", ") || "none";
     const cronCount = Object.keys(config.cron).length;
     const webhookStatus = this.webhookServer
@@ -311,6 +317,7 @@ export class FreeTurtleDaemon {
   \x1b[1mPID ${process.pid}\x1b[0m — swimming along
 
   Modules     ${moduleNames}
+  Skills      ${skillNames}
   Cron tasks  ${cronCount}
   Channels    ${channelNames}
   Webhooks    ${webhookStatus}

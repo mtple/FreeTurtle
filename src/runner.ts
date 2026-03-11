@@ -15,6 +15,8 @@ import { PolicyDeniedError, requiresApproval } from "./policy.js";
 import { ApprovalManager } from "./approval.js";
 import { AuditLogger, type AuditToolCall } from "./audit.js";
 import { redact } from "./redaction.js";
+import type { LoadedSkill } from "./skills/types.js";
+import { buildSkillsPrompt } from "./skills/index.js";
 
 export interface TaskConfig {
   name: string;
@@ -35,6 +37,7 @@ export class TaskRunner {
   private dir: string;
   private llm: LLMClient;
   private modules: FreeTurtleModule[];
+  private skills: LoadedSkill[];
   private logger: Logger;
   private policy?: PolicyConfig;
   private approvalManager: ApprovalManager;
@@ -51,11 +54,13 @@ export class TaskRunner {
     options?: {
       policy?: PolicyConfig;
       onApprovalNeeded?: ApprovalNotifier;
+      skills?: LoadedSkill[];
     },
   ) {
     this.dir = dir;
     this.llm = llm;
     this.modules = modules;
+    this.skills = options?.skills ?? [];
     this.logger = logger;
     this.policy = options?.policy;
     this.approvalManager = new ApprovalManager(dir);
@@ -242,6 +247,16 @@ export class TaskRunner {
 
     if (heartbeatChecklist) {
       parts.push("### Heartbeat Checklist\n" + heartbeatChecklist + "\n");
+    }
+
+    // Inject Agent Skills index (OpenClaw / ClawHub / Claude Code compatible)
+    // Progressive disclosure: only name/description/location go into the prompt.
+    // The LLM reads the full SKILL.md via read_file when a skill matches.
+    if (this.skills.length > 0) {
+      const skillsPrompt = buildSkillsPrompt(this.skills);
+      if (skillsPrompt) {
+        parts.push(skillsPrompt + "\n");
+      }
     }
 
     parts.push(

@@ -1,6 +1,6 @@
 {
   "name": "freeturtle",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "description": "An open-source framework for deploying autonomous AI CEOs that run onchain businesses.",
   "type": "module",
   "main": "dist/bin/freeturtle.js",
@@ -17,7 +17,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "ai",
@@ -36,9 +39,11 @@
     "@types/pg": "^8.18.0",
     "@types/qrcode-terminal": "^0.12.2",
     "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

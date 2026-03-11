@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type PolicyConfig, parsePolicy } from "./policy.js";
+import type { SkillsConfig } from "./skills/types.js";
 
 export interface CronTask {
   schedule: string;
@@ -38,6 +39,7 @@ export interface FreeTurtleConfig {
   cron: Record<string, CronTask>;
   channels: Record<string, ChannelConfig>;
   modules: Record<string, ModuleConfig>;
+  skills: SkillsConfig;
   policy: PolicyConfig;
 }
 
@@ -64,6 +66,7 @@ function parseConfig(raw: string): FreeTurtleConfig {
     cron: {},
     channels: {},
     modules: {},
+    skills: { enabled: true },
     policy: undefined as unknown as PolicyConfig, // parsed after loop
   };
 
@@ -122,6 +125,12 @@ function parseConfig(raw: string): FreeTurtleConfig {
         config.modules[currentSubSection] = { enabled: false };
       }
       config.modules[currentSubSection][key] = parseValue(value);
+    } else if (currentSection === "skills") {
+      if (key === "enabled") {
+        config.skills.enabled = value === "true";
+      } else if (key === "extra_dirs") {
+        config.skills.extra_dirs = value.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+      }
     } else if (currentSection === "policy" && currentSubSection) {
       if (!policyRaw[currentSubSection]) {
         policyRaw[currentSubSection] = {};

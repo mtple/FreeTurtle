@@ -22,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.29");
+  .version("0.1.30");
 
 program
   .command("hello")
@@ -30,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.29");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.30");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
@@ -110,6 +110,24 @@ program
   .action(async (message, opts) => {
     const { runSend } = await import("../src/cli/send.js");
     await runSend(opts.dir, message);
+  });
+
+program
+  .command("stop")
+  .description("Stop the FreeTurtle daemon")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { runStop } = await import("../src/cli/stop.js");
+    await runStop(opts.dir);
+  });
+
+program
+  .command("restart")
+  .description("Restart the FreeTurtle daemon")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { runRestart } = await import("../src/cli/restart.js");
+    await runRestart(opts.dir);
   });
 
 program
@@ -214,6 +232,15 @@ connect
   .action(async (opts) => {
     const { connectOnchain } = await import("../src/cli/connect-onchain.js");
     await connectOnchain(opts.dir);
+  });
+
+program
+  .command("skills")
+  .description("List installed Agent Skills (OpenClaw / ClawHub compatible)")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { runSkillsList } = await import("../src/cli/skills.js");
+    await runSkillsList(opts.dir);
   });
 
 program
