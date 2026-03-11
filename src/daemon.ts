@@ -126,16 +126,24 @@ export class FreeTurtleDaemon {
     const skills = await loadSkills(this.dir, config.skills, this.logger);
 
     // Create runner with policy, skills, and approval notifications
+    const sendToChannels = (msg: string) => {
+      for (const ch of this.channels) {
+        ch.send(msg).catch((err) => {
+          this.logger.error(`Failed to send via ${ch.name}: ${err}`);
+        });
+      }
+    };
+
     this.runner = new TaskRunner(this.dir, llm, modules, this.logger, {
       policy: config.policy,
       skills,
       onApprovalNeeded: (msg) => {
         this.logger.info(`Approval notification: ${msg.slice(0, 100)}`);
-        for (const ch of this.channels) {
-          ch.send(msg).catch((err) => {
-            this.logger.error(`Failed to send approval notification via ${ch.name}: ${err}`);
-          });
-        }
+        sendToChannels(msg);
+      },
+      onFollowup: (msg) => {
+        this.logger.info(`Followup: ${msg.slice(0, 100)}`);
+        sendToChannels(msg);
       },
     });
 
@@ -170,14 +178,17 @@ export class FreeTurtleDaemon {
         this.runner
       ) {
         const pending = await this.runner.getApprovalManager().list("pending");
+        this.logger.info(`Approval intercept: "${lower}", ${pending.length} pending`);
         if (pending.length > 0) {
           const latest = pending[0];
           const approved = ["yes", "approve", "y"].includes(lower);
           if (approved) {
             await this.runner.getApprovalManager().approve(latest.id, "channel");
+            this.logger.info(`Approved ${latest.toolName} (${latest.id})`);
             return `Approved: ${latest.toolName}`;
           } else {
             await this.runner.getApprovalManager().reject(latest.id, undefined, "channel");
+            this.logger.info(`Rejected ${latest.toolName} (${latest.id})`);
             return `Rejected: ${latest.toolName}`;
           }
         }

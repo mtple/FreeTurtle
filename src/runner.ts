@@ -32,6 +32,7 @@ export interface TaskResult {
 }
 
 export type ApprovalNotifier = (message: string) => void;
+export type FollowupSender = (message: string) => void;
 
 export class TaskRunner {
   private dir: string;
@@ -43,6 +44,7 @@ export class TaskRunner {
   private approvalManager: ApprovalManager;
   private auditLogger: AuditLogger;
   private onApprovalNeeded?: ApprovalNotifier;
+  private onFollowup?: FollowupSender;
   private conversationHistory = new Map<string, ConversationTurn[]>();
   private static readonly MAX_HISTORY_TURNS = 10;
 
@@ -54,6 +56,7 @@ export class TaskRunner {
     options?: {
       policy?: PolicyConfig;
       onApprovalNeeded?: ApprovalNotifier;
+      onFollowup?: FollowupSender;
       skills?: LoadedSkill[];
     },
   ) {
@@ -66,6 +69,7 @@ export class TaskRunner {
     this.approvalManager = new ApprovalManager(dir);
     this.auditLogger = new AuditLogger(dir);
     this.onApprovalNeeded = options?.onApprovalNeeded;
+    this.onFollowup = options?.onFollowup;
   }
 
   async runTask(task: TaskConfig): Promise<TaskResult> {
@@ -318,10 +322,9 @@ export class TaskRunner {
       toolsCalled.push(call.name);
       this.logger.info(`Tool call: ${call.name}`);
 
-      // Check if this tool requires approval
+      // Check if this tool requires approval — non-blocking (OpenClaw pattern)
       if (requiresApproval(this.policy, call.name, call.input)) {
         const timeoutSeconds = this.policy?.approvals?.timeout_seconds ?? 300;
-        const failMode = this.policy?.approvals?.fail_mode ?? "deny";
 
         const redactedInput = redact(call.input) as Record<string, unknown>;
         const approvalReq = await this.approvalManager.createRequest({
@@ -345,32 +348,66 @@ export class TaskRunner {
           );
         }
 
-        const decision = await this.approvalManager.waitForDecision(
-          approvalReq.id,
-          timeoutSeconds * 1000
-        );
+        // Fire-and-forget: wait for approval, execute, send result as followup.
+        // This does NOT block the agent loop — the tool returns immediately.
+        void (async () => {
+          try {
+            const decision = await this.approvalManager.waitForDecision(
+              approvalReq.id,
+              timeoutSeconds * 1000,
+            );
 
-        if (decision.status !== "approved") {
-          const reason = decision.status === "rejected"
-            ? `Rejected${decision.rejectReason ? `: ${decision.rejectReason}` : ""}`
-            : failMode === "allow" ? null : `${decision.status} (fail_mode: deny)`;
+            if (decision.status !== "approved") {
+              const reason = decision.status === "rejected"
+                ? `Rejected${decision.rejectReason ? `: ${decision.rejectReason}` : ""}`
+                : `${decision.status}`;
+              this.logger.info(`Approval ${reason} for ${call.name}`);
+              if (this.onFollowup) {
+                this.onFollowup(`${call.name} was ${reason.toLowerCase()}.`);
+              }
+              return;
+            }
 
-          if (reason) {
+            this.logger.info(`Approval granted for ${call.name}, executing...`);
+
+            // Execute the tool
+            let result = `Error: no module found for ${call.name}`;
+            for (const mod of this.modules) {
+              const toolNames = mod.getTools().map((t) => t.name);
+              if (toolNames.includes(call.name)) {
+                result = await mod.executeTool(call.name, call.input);
+                break;
+              }
+            }
+
             auditToolCalls.push({
               name: call.name,
               input: redactedInput,
-              error: reason,
+              output: result.slice(0, 500),
               durationMs: Date.now() - toolStart,
               retries: 0,
               approvalId: approvalReq.id,
-              approvalStatus: decision.status,
+              approvalStatus: "approved",
             });
-            return `Error: ${reason}`;
-          }
-          // fail_mode: allow — proceed despite expiry
-        }
 
-        this.logger.info(`Approval granted for ${call.name}`);
+            // Send the result as a new message via channels
+            if (this.onFollowup) {
+              const preview = result.length > 2000
+                ? result.slice(0, 2000) + "\n...(truncated)"
+                : result;
+              this.onFollowup(preview);
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            this.logger.error(`Approval followup failed for ${call.name}: ${msg}`);
+            if (this.onFollowup) {
+              this.onFollowup(`${call.name} failed: ${msg}`);
+            }
+          }
+        })();
+
+        // Return immediately — agent loop continues without blocking
+        return `Approval requested for ${call.name}. The founder has been notified. The result will be delivered once approved and executed.`;
       }
 
       // Execute the tool
