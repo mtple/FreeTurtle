@@ -1,11 +1,12 @@
-import net from "node:net";
-import { join } from "node:path";
+import { rpcCall } from "../rpc/client.js";
 
 export async function runStatus(dir: string): Promise<void> {
-  const sockPath = join(dir, "daemon.sock");
-
-  const response = await ipcRequest(sockPath, "status");
-  const status = JSON.parse(response);
+  const status = (await rpcCall("status")) as {
+    pid: number;
+    uptime: number;
+    scheduler?: { tasks?: { name: string; nextRun?: string; running?: boolean }[] };
+    channels: string[];
+  };
 
   const uptimeStr = formatUptime(status.uptime);
 
@@ -33,26 +34,4 @@ function formatUptime(seconds: number): string {
   if (h < 24) return `${h}h ${m}m`;
   const d = Math.floor(h / 24);
   return `${d}d ${h % 24}h`;
-}
-
-export function ipcRequest(sockPath: string, command: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const client = net.createConnection(sockPath, () => {
-      client.write(command);
-      client.end();
-    });
-
-    let data = "";
-    client.on("data", (chunk) => {
-      data += chunk.toString();
-    });
-    client.on("end", () => resolve(data));
-    client.on("error", (err) => {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        reject(new Error("FreeTurtle daemon is not running."));
-      } else {
-        reject(err);
-      }
-    });
-  });
 }

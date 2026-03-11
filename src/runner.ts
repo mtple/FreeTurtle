@@ -312,10 +312,9 @@ export class TaskRunner {
         // Notify founder through channels
         if (this.onApprovalNeeded) {
           this.onApprovalNeeded(
-            `⚠️ Approval needed: ${call.name}\n` +
-            `Input: ${JSON.stringify(redactedInput)}\n` +
-            `Approve: freeturtle approve ${approvalReq.id}\n` +
-            `Reject: freeturtle reject ${approvalReq.id}`
+            `Approval needed: ${call.name}\n` +
+            `Input: ${JSON.stringify(redactedInput)}\n\n` +
+            `Reply "yes" to approve or "no" to reject.`
           );
         }
 

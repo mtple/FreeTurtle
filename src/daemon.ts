@@ -12,6 +12,8 @@ import { TerminalChannel } from "./channels/terminal.js";
 import { TelegramChannel } from "./channels/telegram.js";
 import type { Channel } from "./channels/types.js";
 import { WebhookServer } from "./webhooks/server.js";
+import { RpcServer } from "./rpc/server.js";
+import { DEFAULT_RPC_PORT } from "./rpc/protocol.js";
 import { createLogger, type Logger } from "./logger.js";
 import { refreshOpenAIAccessToken } from "./oauth/openai.js";
 import {
@@ -50,7 +52,7 @@ export class FreeTurtleDaemon {
   private heartbeat?: Heartbeat;
   private channels: Channel[] = [];
   private runner?: TaskRunner;
-  private ipcServer?: net.Server;
+  private rpcServer?: RpcServer;
   private webhookServer?: WebhookServer;
   private shuttingDown = false;
   private watchdogTimer?: ReturnType<typeof setInterval>;
@@ -156,6 +158,25 @@ export class FreeTurtleDaemon {
 
     // Start channels
     const onMessage = async (text: string, images?: import("./channels/types.js").MessageImage[]) => {
+      // Intercept approval replies: "yes", "no", "approve", "reject"
+      const lower = text.trim().toLowerCase();
+      if (
+        ["yes", "no", "approve", "reject", "y", "n"].includes(lower) &&
+        this.runner
+      ) {
+        const pending = await this.runner.getApprovalManager().list("pending");
+        if (pending.length > 0) {
+          const latest = pending[0]; // most recent pending request
+          const approved = ["yes", "approve", "y"].includes(lower);
+          if (approved) {
+            await this.runner.getApprovalManager().approve(latest.id, "channel");
+            return `Approved: ${latest.toolName}`;
+          } else {
+            await this.runner.getApprovalManager().reject(latest.id, undefined, "channel");
+            return `Rejected: ${latest.toolName}`;
+          }
+        }
+      }
       return this.runner!.runMessage(text, "channel", images);
     };
 
@@ -205,8 +226,14 @@ export class FreeTurtleDaemon {
     const pidPath = join(this.dir, "daemon.pid");
     await writeFile(pidPath, String(process.pid), "utf-8");
 
-    // Start IPC server
-    await this.startIpc();
+    // Start RPC server (WebSocket on port 18820, like OpenClaw's gateway)
+    const rpcPort = parseInt(env.RPC_PORT || String(DEFAULT_RPC_PORT), 10);
+    this.rpcServer = new RpcServer(
+      (method, params) => this.handleRpc(method, params),
+      this.logger,
+      rpcPort,
+    );
+    await this.rpcServer.start();
 
     // Signal handlers
     const shutdown = async () => {
@@ -258,6 +285,7 @@ export class FreeTurtleDaemon {
   Cron tasks  ${cronCount}
   Channels    ${channelNames}
   Webhooks    ${webhookStatus}
+  RPC         ws://127.0.0.1:${rpcPort}
 
   \x1b[2mfreeturtle send "message"  — talk to your CEO\x1b[0m
   \x1b[2mfreeturtle start --chat   — interactive mode\x1b[0m
@@ -296,7 +324,7 @@ export class FreeTurtleDaemon {
       await ch.stop();
     }
     if (this.webhookServer) await this.webhookServer.stop();
-    this.ipcServer?.close();
+    this.rpcServer?.stop();
 
     // Remove PID file
     try {
@@ -304,131 +332,76 @@ export class FreeTurtleDaemon {
     } catch {
       // ignore
     }
-    // Remove socket
-    try {
-      await unlink(join(this.dir, "daemon.sock"));
-    } catch {
-      // ignore
-    }
 
     this.logger.info("FreeTurtle stopped");
   }
 
-  private async startIpc(): Promise<void> {
-    const sockPath = join(this.dir, "daemon.sock");
+  private async handleRpc(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<unknown> {
+    switch (method) {
+      case "status":
+        return {
+          pid: process.pid,
+          uptime: process.uptime(),
+          scheduler: this.scheduler?.getStatus() ?? null,
+          channels: this.channels.map((c) => c.name),
+        };
 
-    // Remove stale socket
-    try {
-      await unlink(sockPath);
-    } catch {
-      // ignore
-    }
+      case "health":
+        return {
+          status: this.runner ? "ok" : "degraded",
+          pid: process.pid,
+          uptime: process.uptime(),
+          memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+          runner: !!this.runner,
+          channels: this.channels.map((c) => c.name),
+          scheduler: this.scheduler?.getStatus() ?? null,
+          heartbeat: !!this.heartbeat,
+          timestamp: new Date().toISOString(),
+        };
 
-    this.ipcServer = net.createServer((conn) => {
-      let data = "";
-      conn.on("data", (chunk) => {
-        data += chunk.toString();
-      });
-      conn.on("end", () => {
-        this.handleIpc(data.trim()).then((response) => {
-          conn.write(response);
-          conn.end();
-        }).catch((err) => {
-          this.logger.error(`IPC handler error: ${err instanceof Error ? err.message : err}`);
-          conn.end();
+      case "send": {
+        const message = params.message as string;
+        if (!message) throw new Error("Missing 'message' param");
+        if (!this.runner) throw new Error("Runner not initialized");
+        return await this.runner.runMessage(message, "rpc");
+      }
+
+      case "approve": {
+        const id = params.id as string;
+        if (!id) throw new Error("Missing 'id' param");
+        if (!this.runner) throw new Error("Runner not initialized");
+        return await this.runner.getApprovalManager().approve(id, "rpc");
+      }
+
+      case "reject": {
+        const id = params.id as string;
+        if (!id) throw new Error("Missing 'id' param");
+        if (!this.runner) throw new Error("Runner not initialized");
+        return await this.runner.getApprovalManager().reject(
+          id,
+          params.reason as string | undefined,
+          "rpc",
+        );
+      }
+
+      case "approvals": {
+        if (!this.runner) throw new Error("Runner not initialized");
+        return await this.runner.getApprovalManager().list("pending");
+      }
+
+      case "stop":
+        this.stop().then(() => process.exit(0)).catch((e) => {
+          this.logger.error(`Stop error: ${e}`);
+          process.exit(1);
         });
-      });
-    });
+        return { stopping: true };
 
-    this.ipcServer.listen(sockPath);
-    this.logger.info(`IPC listening on ${sockPath}`);
-  }
-
-  private async handleIpc(command: string): Promise<string> {
-    if (command === "status") {
-      const status = {
-        pid: process.pid,
-        uptime: process.uptime(),
-        scheduler: this.scheduler?.getStatus() ?? null,
-        channels: this.channels.map((c) => c.name),
-      };
-      return JSON.stringify(status, null, 2);
+      default:
+        throw new Error(`Unknown method: ${method}`);
     }
-
-    if (command === "health") {
-      const health: Record<string, unknown> = {
-        status: "ok",
-        pid: process.pid,
-        uptime: process.uptime(),
-        memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
-        runner: !!this.runner,
-        channels: this.channels.map((c) => c.name),
-        scheduler: this.scheduler?.getStatus() ?? null,
-        heartbeat: !!this.heartbeat,
-        timestamp: new Date().toISOString(),
-      };
-      if (!this.runner) health.status = "degraded";
-      return JSON.stringify(health, null, 2);
-    }
-
-    if (command.startsWith("send ")) {
-      const message = command.slice(5);
-      if (!this.runner) return "Error: runner not initialized";
-      try {
-        const response = await this.runner.runMessage(message, "ipc");
-        return response;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        this.logger.error(`IPC send failed: ${msg}`);
-        return `Error: ${msg}`;
-      }
-    }
-
-    if (command.startsWith("approve ")) {
-      const id = command.slice(8).trim();
-      if (!this.runner) return "Error: runner not initialized";
-      try {
-        const req = await this.runner.getApprovalManager().approve(id, "ipc");
-        return JSON.stringify(req, null, 2);
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : "unknown"}`;
-      }
-    }
-
-    if (command.startsWith("reject ")) {
-      const parts = command.slice(7).trim();
-      const spaceIdx = parts.indexOf(" ");
-      const id = spaceIdx > -1 ? parts.slice(0, spaceIdx) : parts;
-      const reason = spaceIdx > -1 ? parts.slice(spaceIdx + 1) : undefined;
-      if (!this.runner) return "Error: runner not initialized";
-      try {
-        const req = await this.runner.getApprovalManager().reject(id, reason, "ipc");
-        return JSON.stringify(req, null, 2);
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : "unknown"}`;
-      }
-    }
-
-    if (command === "approvals") {
-      if (!this.runner) return "Error: runner not initialized";
-      try {
-        const pending = await this.runner.getApprovalManager().list("pending");
-        if (pending.length === 0) return "No pending approvals.";
-        return JSON.stringify(pending, null, 2);
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : "unknown"}`;
-      }
-    }
-
-    if (command === "stop") {
-      this.stop().then(() => process.exit(0)).catch((e) => {
-        this.logger.error(`Stop error: ${e}`);
-        process.exit(1);
-      });
-      return "Stopping...";
-    }
-
-    return `Unknown command: ${command}`;
   }
 
   private async maybeRefreshOpenAIOAuthToken(

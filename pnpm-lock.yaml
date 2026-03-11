@@ -43,7 +43,7 @@ importers:
         version: 1.41.1
       openai:
         specifier: ^6.25.0
-        version: 6.25.0(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@3.25.76)
+        version: 6.25.0(ws@8.19.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@3.25.76)
       pg:
         specifier: ^8.19.0
         version: 8.19.0
@@ -53,6 +53,9 @@ importers:
       viem:
         specifier: ^2.46.3
         version: 2.46.3(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.76)
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -66,6 +69,9 @@ importers:
       '@types/qrcode-terminal':
         specifier: ^0.12.2
         version: 0.12.2
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       eslint:
         specifier: ^10.0.2
         version: 10.0.2
@@ -3231,9 +3237,9 @@ snapshots:
 
   object-inspect@1.13.4: {}
 
-  openai@6.25.0(ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@3.25.76):
+  openai@6.25.0(ws@8.19.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@3.25.76):
     optionalDependencies:
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.19.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       zod: 3.25.76
 
   optionator@0.9.4:
@@ -3367,7 +3373,7 @@ snapshots:
       buffer: 6.0.3
       eventemitter3: 5.0.1
       uuid: 11.1.0
-      ws: 8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.19.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6

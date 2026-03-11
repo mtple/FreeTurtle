@@ -1,6 +1,6 @@
 {
   "name": "freeturtle",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "An open-source framework for deploying autonomous AI CEOs that run onchain businesses.",
   "type": "module",
   "main": "dist/bin/freeturtle.js",
@@ -35,14 +35,15 @@
     "@types/node": "^25.3.3",
     "@types/pg": "^8.18.0",
     "@types/qrcode-terminal": "^0.12.2",
+    "@types/ws": "^8.18.1",
     "eslint": "^10.0.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
-    "@coinbase/cdp-sdk": "^1.45.0",
     "@clack/prompts": "^1.1.0",
+    "@coinbase/cdp-sdk": "^1.45.0",
     "@farcaster/hub-nodejs": "^0.15.10",
     "@googleapis/gmail": "^16.1.1",
     "@octokit/rest": "^22.0.1",
@@ -54,6 +55,7 @@
     "openai": "^6.25.0",
     "pg": "^8.19.0",
     "qrcode-terminal": "^0.12.0",
-    "viem": "^2.46.3"
+    "viem": "^2.46.3",
+    "ws": "^8.19.0"
   }
 }

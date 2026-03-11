@@ -22,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.26");
+  .version("0.1.27");
 
 program
   .command("hello")
@@ -30,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.26");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.27");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
@@ -83,9 +83,11 @@ program
   .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
   .action(async (opts) => {
     try {
-      const { ipcRequest } = await import("../src/cli/status.js");
-      const response = await ipcRequest(join(opts.dir, "daemon.sock"), "health");
-      const health = JSON.parse(response);
+      const { rpcCall } = await import("../src/rpc/client.js");
+      const health = (await rpcCall("health")) as {
+        status: string; pid: number; uptime: number; memoryMB: number;
+        runner: boolean; channels: string[]; heartbeat: boolean;
+      };
       const color = health.status === "ok" ? "\x1b[32m" : "\x1b[31m";
       console.log(`\n  ${color}${health.status.toUpperCase()}\x1b[0m\n`);
       console.log(`  PID        ${health.pid}`);
