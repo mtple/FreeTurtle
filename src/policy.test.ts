@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { requiresApproval, parsePolicy, getDefaultPolicy, PolicyDeniedError } from "./policy.js";
 
 describe("requiresApproval", () => {
-  it("requires approval for run_command", () => {
-    expect(requiresApproval(undefined, "run_command", { command: "ls" })).toBe(true);
+  it("does not require approval for run_command", () => {
+    expect(requiresApproval(undefined, "run_command", { command: "ls" })).toBe(false);
   });
 
   it("requires approval for delete_cast", () => {

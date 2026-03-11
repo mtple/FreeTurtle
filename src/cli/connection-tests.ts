@@ -59,6 +59,25 @@ export async function testGmail(
 }
 
 /**
+ * Test a Brave Search API key by running a simple query.
+ */
+export async function testBraveSearch(apiKey: string): Promise<void> {
+  const res = await fetch(
+    "https://api.search.brave.com/res/v1/web/search?q=test&count=1",
+    {
+      headers: {
+        Accept: "application/json",
+        "X-Subscription-Token": apiKey,
+      },
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Brave Search API error (${res.status}): ${body}`);
+  }
+}
+
+/**
  * Test an EVM RPC URL by calling eth_blockNumber.
  */
 export async function testOnchain(rpcUrl: string): Promise<void> {

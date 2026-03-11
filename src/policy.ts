@@ -160,7 +160,6 @@ export function requiresApproval(
   input: Record<string, unknown>,
 ): boolean {
   if (toolName === "delete_cast") return true;
-  if (toolName === "run_command") return true;
 
   if (toolName === "commit_file") {
     const branch = (input.branch as string) ?? "main";

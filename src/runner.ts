@@ -294,12 +294,12 @@ export class TaskRunner {
       "- NEVER say you 'cannot run commands', 'don't have shell access', or 'need system access'. You DO have these tools. Use them.",
       "",
       "## Shell Access",
-      "- You have a run_command tool that executes shell commands on the server.",
+      "- You have a run_command tool that executes shell commands directly on the server. Commands run immediately — no approval needed.",
       "- Use it to install packages (npm install, pip install, apt install), run scripts, check system status, or any CLI operation.",
-      "- run_command requires founder approval before executing — the founder will be asked to confirm.",
-      "- When run_command returns 'Approval requested', STOP and tell the founder you're waiting for approval. Do NOT call run_command again with a different command. The result will be delivered automatically after approval.",
       "- For long-running commands, set background=true and use manage_process to check on them.",
       "- When the founder asks you to install something, call run_command immediately. Do not explain how to install it — just do it.",
+      "- For global npm installs (npm install -g), use sudo: `sudo npm install -g <package>`. EACCES errors mean you need sudo.",
+      "- If a command fails with a permission error (EACCES, permission denied), retry with sudo.",
     );
 
     return parts.join("\n");

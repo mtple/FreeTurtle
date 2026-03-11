@@ -7,7 +7,7 @@ import { LLMClient } from "../llm.js";
 import { connectFarcaster } from "./connect-farcaster.js";
 import { connectGmail } from "./connect-gmail.js";
 import { scanForSecrets, redactSecrets, condenseDocs } from "./intake.js";
-import { testTelegram, testGitHub, testDatabase, testOnchain } from "./connection-tests.js";
+import { testTelegram, testGitHub, testDatabase, testOnchain, testBraveSearch } from "./connection-tests.js";
 import { runInstallService } from "./install-service.js";
 import { createWebhook, channelToUrl, type WebhookSubscription } from "../webhooks/neynar.js";
 
@@ -205,6 +205,8 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: string;
     onchain: boolean;
     rpcUrl: string;
+    webSearch: boolean;
+    braveApiKey: string;
     webhookEnabled: boolean;
     webhookPort: string;
     webhookSecret: string;
@@ -239,6 +241,8 @@ export async function runInit(dir: string): Promise<void> {
     dbUrl: "",
     onchain: false,
     rpcUrl: "",
+    webSearch: false,
+    braveApiKey: "",
     webhookEnabled: false,
     webhookPort: "3456",
     webhookSecret: "",
@@ -763,6 +767,34 @@ export async function runInit(dir: string): Promise<void> {
       }
       return true;
     },
+    // 12. Web Search (Brave)
+    async () => {
+      const enable = await p.confirm({
+        message: "Connect web search? (Brave Search API — free tier: 2,000 queries/month)",
+        initialValue: state.webSearch,
+      });
+      if (p.isCancel(enable)) return false;
+      state.webSearch = enable;
+      if (enable) {
+        p.note(
+          [
+            "Get a free API key at:",
+            "  brave.com/search/api",
+            "",
+            "Your CEO will use this to research topics,",
+            "fact-check information, and stay current.",
+          ].join("\n"),
+          "Brave Search setup"
+        );
+
+        const key = await promptWithExisting({ message: "Brave Search API key", existing: existingEnv.BRAVE_API_KEY, mask: true });
+        if (p.isCancel(key)) { state.webSearch = false; return true; }
+        state.braveApiKey = key;
+
+        await runConnectionTest("Brave Search", () => testBraveSearch(state.braveApiKey));
+      }
+      return true;
+    },
   ];
 
   // Run steps — Ctrl+C goes back, Ctrl+C on first step exits
@@ -863,6 +895,7 @@ export async function runInit(dir: string): Promise<void> {
     state.github && "GitHub",
     state.database && "Database",
     state.onchain && "Onchain",
+    state.webSearch && "Web Search",
   ].filter(Boolean);
 
   await p.tasks([
@@ -970,6 +1003,9 @@ ${state.founderName}.
           "### onchain",
           `- enabled: ${state.onchain}`,
           "",
+          "### web-search",
+          `- enabled: ${state.webSearch}`,
+          "",
           "## Policy",
           "### github",
           "- approval_required_branches: main",
@@ -999,6 +1035,7 @@ ${state.founderName}.
         if (state.githubToken) envLines.push(`GITHUB_TOKEN=${state.githubToken}`);
         if (state.dbUrl) envLines.push(`DATABASE_URL=${state.dbUrl}`);
         if (state.rpcUrl) envLines.push(`RPC_URL=${state.rpcUrl}`);
+        if (state.braveApiKey) envLines.push(`BRAVE_API_KEY=${state.braveApiKey}`);
         if (state.webhookEnabled) {
           envLines.push(`WEBHOOK_ENABLED=true`);
           envLines.push(`WEBHOOK_PORT=${state.webhookPort}`);

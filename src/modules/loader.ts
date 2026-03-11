@@ -10,6 +10,7 @@ import { XmtpModule } from "./xmtp/index.js";
 import { GmailModule } from "./gmail/index.js";
 import { WorkspaceModule } from "./workspace/index.js";
 import { ShellModule } from "./shell/index.js";
+import { WebSearchModule } from "./web-search/index.js";
 
 const MODULE_MAP: Record<string, new () => FreeTurtleModule> = {
   farcaster: FarcasterModule,
@@ -19,6 +20,7 @@ const MODULE_MAP: Record<string, new () => FreeTurtleModule> = {
   onchain: OnchainModule,
   xmtp: XmtpModule,
   shell: ShellModule,
+  "web-search": WebSearchModule,
 };
 
 export async function loadModules(
