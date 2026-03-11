@@ -55,6 +55,7 @@ export class FreeTurtleDaemon {
   private rpcServer?: RpcServer;
   private webhookServer?: WebhookServer;
   private shuttingDown = false;
+  private messageQueue: Promise<string> = Promise.resolve("");
   private watchdogTimer?: ReturnType<typeof setInterval>;
 
   constructor(dir: string, options: DaemonOptions = {}) {
@@ -156,9 +157,8 @@ export class FreeTurtleDaemon {
       this.logger.info("Heartbeat disabled in config");
     }
 
-    // Start channels
-    const onMessage = async (text: string, images?: import("./channels/types.js").MessageImage[]) => {
-      // Intercept approval replies: "yes", "no", "approve", "reject"
+    // Start channels — serialize agent loop calls but let approval replies through immediately
+    const tryApprovalIntercept = async (text: string): Promise<string | null> => {
       const lower = text.trim().toLowerCase();
       if (
         ["yes", "no", "approve", "reject", "y", "n"].includes(lower) &&
@@ -166,7 +166,7 @@ export class FreeTurtleDaemon {
       ) {
         const pending = await this.runner.getApprovalManager().list("pending");
         if (pending.length > 0) {
-          const latest = pending[0]; // most recent pending request
+          const latest = pending[0];
           const approved = ["yes", "approve", "y"].includes(lower);
           if (approved) {
             await this.runner.getApprovalManager().approve(latest.id, "channel");
@@ -177,7 +177,36 @@ export class FreeTurtleDaemon {
           }
         }
       }
-      return this.runner!.runMessage(text, "channel", images);
+      return null; // not an approval reply
+    };
+
+    const MESSAGE_TIMEOUT_MS = 180_000; // 3 minutes max per message
+
+    const onMessage = async (text: string, images?: import("./channels/types.js").MessageImage[]): Promise<string> => {
+      // Approval replies bypass the queue — they must resolve immediately
+      // so the blocked agent loop can continue.
+      const approvalResult = await tryApprovalIntercept(text);
+      if (approvalResult !== null) return approvalResult;
+
+      // Serialize agent loop calls so concurrent messages don't collide.
+      this.messageQueue = this.messageQueue
+        .catch(() => {}) // don't let a prior failure block the queue
+        .then(() => {
+          // Wrap runMessage with a timeout so a hung LLM call can't block
+          // the queue forever.
+          return Promise.race([
+            this.runner!.runMessage(text, "channel", images),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("Message timed out")), MESSAGE_TIMEOUT_MS),
+            ),
+          ]);
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          this.logger.error(`Message processing failed: ${msg}`);
+          return `Sorry, something went wrong: ${msg}`;
+        });
+      return this.messageQueue;
     };
 
     if (this.options.chat) {
