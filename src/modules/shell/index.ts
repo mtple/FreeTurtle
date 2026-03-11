@@ -144,7 +144,11 @@ export class ShellModule implements FreeTurtleModule {
   name = "shell";
   description = "Execute shell commands and manage background processes";
 
-  async initialize(): Promise<void> {
+  async initialize(
+    _config: Record<string, unknown>,
+    _env: Record<string, string>,
+    _options?: { policy?: import("../../policy.js").PolicyConfig },
+  ): Promise<void> {
     ensureSweeper();
   }
 

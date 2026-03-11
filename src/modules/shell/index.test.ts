@@ -12,7 +12,7 @@ describe("ShellModule", () => {
   });
 
   it("executes a simple command", async () => {
-    await mod.initialize();
+    await mod.initialize({}, {});
     const result = await mod.executeTool("run_command", {
       command: "echo hello",
     });

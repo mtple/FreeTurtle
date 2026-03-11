@@ -283,6 +283,18 @@ export class TaskRunner {
       "- Contributors submit via EMAIL only — they do NOT interact with the blockchain.",
       "- To review and pay out a task: call review_task_submissions, then search Gmail for the keyword, evaluate submissions, then YOU call submit_on_behalf_of(task_id, winner_wallet_address) to record the submission onchain, then YOU call approve_task_submission(task_id, submission_index) to release payment.",
       "- NEVER tell contributors to submit onchain or call any contract function. You handle ALL onchain operations on their behalf.",
+      "",
+      "## Tool Call Style",
+      "- When a first-class tool exists for an action, use the tool directly instead of asking the founder to do it manually.",
+      "- Do not narrate routine tool calls — just call the tool.",
+      "- NEVER say you 'cannot run commands', 'don't have shell access', or 'need system access'. You DO have these tools. Use them.",
+      "",
+      "## Shell Access",
+      "- You have a run_command tool that executes shell commands on the server.",
+      "- Use it to install packages (npm install, pip install, apt install), run scripts, check system status, or any CLI operation.",
+      "- run_command requires founder approval before executing — the founder will be asked to confirm.",
+      "- For long-running commands, set background=true and use manage_process to check on them.",
+      "- When the founder asks you to install something, call run_command immediately. Do not explain how to install it — just do it.",
     );
 
     return parts.join("\n");

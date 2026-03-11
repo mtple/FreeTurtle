@@ -42,6 +42,16 @@ export async function loadModules(
     }
   }
 
+  // Shell module is always loaded — gives the CEO command-line access
+  try {
+    const shell = new ShellModule();
+    await shell.initialize({}, env, { policy });
+    modules.push(shell);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    logger?.error(`Shell module failed to initialize: ${msg}`);
+  }
+
   for (const [name, moduleConfig] of Object.entries(config.modules)) {
     if (!moduleConfig.enabled) continue;
 
