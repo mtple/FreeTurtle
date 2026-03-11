@@ -42,7 +42,7 @@ Before running init, create a separate identity for your CEO:
 - **Google account** — use it to sign up for everything below
 - **Farcaster** — the account your CEO will post from
 - **Neynar** — API access for Farcaster (sign up at [dev.neynar.com](https://dev.neynar.com))
-- **GitHub** (optional) — if your CEO will manage repos, give it its own account
+- **GitHub** — if your CEO will manage repos, give it its own account
 
 The CEO is effectively a team member who needs its own accounts.
 

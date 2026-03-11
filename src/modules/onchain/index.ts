@@ -2,6 +2,7 @@ import type { FreeTurtleModule, ToolDefinition } from "../types.js";
 import type { PolicyConfig } from "../../policy.js";
 import { assertOnchainScopeAllowed } from "../../policy.js";
 import { withRetry } from "../../reliability.js";
+import { isAlpha, ALPHA_REQUIRED_MSG } from "../../alpha.js";
 import { OnchainClient } from "./client.js";
 import { onchainTools } from "./tools.js";
 import {
@@ -40,20 +41,24 @@ export class OnchainModule implements FreeTurtleModule {
     this.env = env;
     this.workspaceDir = _config._workspaceDir as string | undefined;
 
-    this.walletProvider = await createWalletProvider(env);
-    if (this.walletProvider) {
-      setCachedAccount(this.walletProvider.account);
-    }
+    // Server wallet, taskboard, and portfolio are alpha features
+    if (isAlpha()) {
+      this.walletProvider = await createWalletProvider(env);
+      if (this.walletProvider) {
+        setCachedAccount(this.walletProvider.account);
+      }
 
-    this.hasWriteAccess = this.walletProvider !== null && !!env.TASK_CHAIN_ID;
-    this.hasTaskboard =
-      this.hasWriteAccess && !!env.TASK_CONTRACT_ADDRESS;
+      this.hasWriteAccess = this.walletProvider !== null && !!env.TASK_CHAIN_ID;
+      this.hasTaskboard =
+        this.hasWriteAccess && !!env.TASK_CONTRACT_ADDRESS;
+    }
   }
 
   getTools(): ToolDefinition[] {
-    const tools: ToolDefinition[] = [
-      ...onchainTools,
-      {
+    const tools: ToolDefinition[] = [...onchainTools];
+
+    if (isAlpha()) {
+      tools.push({
         name: "wallet_status",
         description:
           "Check the current wallet provider status, address, chain, and ETH balance.",
@@ -62,14 +67,15 @@ export class OnchainModule implements FreeTurtleModule {
           properties: {},
           required: [],
         },
-      },
-    ];
-    if (this.hasTaskboard) {
-      tools.push(...taskboardTools);
+      });
+      if (this.hasTaskboard) {
+        tools.push(...taskboardTools);
+      }
+      if (this.hasWriteAccess) {
+        tools.push(...portfolioTools);
+      }
     }
-    if (this.hasWriteAccess) {
-      tools.push(...portfolioTools);
-    }
+
     return tools;
   }
 
@@ -111,6 +117,7 @@ export class OnchainModule implements FreeTurtleModule {
         return JSON.stringify(txs);
       }
       case "wallet_status": {
+        if (!isAlpha()) return ALPHA_REQUIRED_MSG;
         if (!this.walletProvider) {
           return "No wallet configured. Set CDP_API_KEY_ID + CDP_API_KEY_SECRET for CDP wallet, or CEO_PRIVATE_KEY for private key wallet.";
         }
@@ -135,19 +142,17 @@ export class OnchainModule implements FreeTurtleModule {
       }
     }
 
-    // TaskBoard tools
-    if (
-      this.hasTaskboard &&
-      taskboardTools.some((t) => t.name === name)
-    ) {
+    // TaskBoard tools (alpha)
+    if (taskboardTools.some((t) => t.name === name)) {
+      if (!isAlpha()) return ALPHA_REQUIRED_MSG;
+      if (!this.hasTaskboard) return "TaskBoard not configured. Set TASK_CHAIN_ID and TASK_CONTRACT_ADDRESS in .env";
       return executeTaskboardTool(name, input, this.env, this.workspaceDir);
     }
 
-    // Portfolio tools
-    if (
-      this.hasWriteAccess &&
-      portfolioTools.some((t) => t.name === name)
-    ) {
+    // Portfolio tools (alpha)
+    if (portfolioTools.some((t) => t.name === name)) {
+      if (!isAlpha()) return ALPHA_REQUIRED_MSG;
+      if (!this.hasWriteAccess) return "Write access not configured. Set up a wallet and TASK_CHAIN_ID in .env";
       return executePortfolioTool(name, input, this.env);
     }
 
