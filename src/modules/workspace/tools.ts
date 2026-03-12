@@ -96,4 +96,38 @@ export const workspaceTools: ToolDefinition[] = [
       required: [],
     },
   },
+  {
+    name: "append_memory",
+    description:
+      "Append a note to today's daily memory file (workspace/memory/YYYY-MM-DD.md). Use this to record observations, decisions, important context, and learnings during tasks. No approval required.",
+    input_schema: {
+      type: "object",
+      properties: {
+        content: {
+          type: "string",
+          description: "The note to append to today's daily memory",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
+    name: "memory_search",
+    description:
+      "Search your memory files — daily logs, long-term memory, session notes, reflections, and strategy docs. Use this before answering questions about prior work, decisions, or history.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query — keywords to find in memory files",
+        },
+        max_results: {
+          type: "number",
+          description: "Maximum number of results to return (default: 10)",
+        },
+      },
+      required: ["query"],
+    },
+  },
 ];

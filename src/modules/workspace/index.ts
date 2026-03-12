@@ -2,7 +2,9 @@ import { readFile, writeFile, readdir, mkdir, stat } from "node:fs/promises";
 import { join, dirname, normalize, resolve } from "node:path";
 import type { FreeTurtleModule, ToolDefinition } from "../types.js";
 import type { PolicyConfig } from "../../policy.js";
+import { PolicyDeniedError, isCoreSection } from "../../policy.js";
 import { workspaceTools } from "./tools.js";
+import { appendDailyMemory, searchMemory } from "../../memory.js";
 
 /** Files that require founder approval to modify */
 const PROTECTED_FILES = ["soul.md", "config.md", ".env"];
@@ -46,6 +48,10 @@ export class WorkspaceModule implements FreeTurtleModule {
         return this.reloadConfig();
       case "restart_daemon":
         return this.restartDaemon();
+      case "append_memory":
+        return this.appendMemory(input.content as string);
+      case "memory_search":
+        return this.memorySearch(input.query as string, input.max_results as number | undefined);
       default:
         throw new Error(`Unknown workspace tool: ${name}`);
     }
@@ -77,7 +83,18 @@ export class WorkspaceModule implements FreeTurtleModule {
     }
   }
 
+  private isSoulPath(path: string): boolean {
+    const normalized = normalize(path);
+    return normalized === "soul.md" || normalized.endsWith("/soul.md");
+  }
+
   private async writeFile(path: string, content: string): Promise<string> {
+    if (this.isSoulPath(path)) {
+      throw new PolicyDeniedError(
+        "SOUL_WRITE_DENIED",
+        "Cannot overwrite soul.md with write_file — use edit_file to modify MUTABLE sections only.",
+      );
+    }
     const full = this.safePath(path);
     await mkdir(dirname(full), { recursive: true });
     await writeFile(full, content, "utf-8");
@@ -98,6 +115,14 @@ export class WorkspaceModule implements FreeTurtleModule {
 
     if (!content.includes(oldText)) {
       return `Error: Could not find the text to replace in ${path}`;
+    }
+
+    // Enforce CORE immutability on soul.md
+    if (this.isSoulPath(path) && isCoreSection(content, oldText)) {
+      throw new PolicyDeniedError(
+        "SOUL_CORE_DENIED",
+        "Cannot modify CORE sections of soul.md — Identity and Values & Boundaries are immutable.",
+      );
     }
 
     const updated = content.replace(oldText, newText);
@@ -128,6 +153,23 @@ export class WorkspaceModule implements FreeTurtleModule {
       const msg = err instanceof Error ? err.message : "Unknown error";
       return `Config reload failed: ${msg}`;
     }
+  }
+
+  private async appendMemory(content: string): Promise<string> {
+    await appendDailyMemory(this.dir, content);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return `Appended to daily memory (workspace/memory/${dateStr}.md)`;
+  }
+
+  private async memorySearch(query: string, maxResults?: number): Promise<string> {
+    const results = await searchMemory(this.dir, query, { maxResults: maxResults ?? 10 });
+    if (results.length === 0) {
+      return `No results found for "${query}"`;
+    }
+    const formatted = results.map((r, i) =>
+      `**${i + 1}. ${r.file}** (line ${r.line}, score ${r.score})\n${r.snippet}`
+    );
+    return formatted.join("\n\n---\n\n");
   }
 
   private async listFiles(path: string): Promise<string> {

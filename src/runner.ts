@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadSoul } from "./soul.js";
-import { readMemoryFile, writeMemoryFile } from "./memory.js";
+import { readMemoryFile, writeMemoryFile, loadRecentDailyMemory } from "./memory.js";
 import type { LLMClient, ConversationTurn } from "./llm.js";
 import type {
   ToolDefinition,
@@ -241,6 +241,18 @@ export class TaskRunner {
       }
     }
 
+    // Load long-term memory (MEMORY.md)
+    let longTermMemory = "";
+    try {
+      const raw = await readFile(join(this.dir, "workspace", "MEMORY.md"), "utf-8");
+      longTermMemory = raw.slice(0, 4000);
+    } catch {
+      // no MEMORY.md yet
+    }
+
+    // Load recent daily memory (today + yesterday)
+    const dailyMemory = await loadRecentDailyMemory(this.dir, 2);
+
     const parts = [
       soul,
       "\n---\n",
@@ -248,6 +260,13 @@ export class TaskRunner {
       "### Recent Posts\n" + recentPosts + "\n",
       "### Post Queue\n" + queueSection + "\n",
     ];
+
+    if (longTermMemory) {
+      parts.push("### Long-Term Memory\n" + longTermMemory + "\n");
+    }
+    if (dailyMemory) {
+      parts.push("### Daily Memory\n" + dailyMemory + "\n");
+    }
 
     if (heartbeatChecklist) {
       parts.push("### Heartbeat Checklist\n" + heartbeatChecklist + "\n");
@@ -286,9 +305,17 @@ export class TaskRunner {
       "- If you are unsure about something, say so rather than guessing.",
       `- The current date and time is: ${new Date().toISOString()}`,
       "",
+      "## Soul Evolution",
+      "- Your soul.md has CORE sections (<!-- CORE -->) and MUTABLE sections (<!-- MUTABLE -->).",
+      "- CORE sections (Identity, Values & Boundaries) cannot be modified under any circumstances. Attempts will be rejected.",
+      "- MUTABLE sections (Voice, Knowledge, Goals, Content & Posting, Strategic Thinking, Continuity, Philosophical Stance) can be updated via edit_file (requires founder approval).",
+      "- NEVER use write_file on soul.md — it will be rejected. Always use edit_file targeting specific MUTABLE sections.",
+      "- Before executing soul edits, write a proposal to workspace/reflections/ explaining what you want to change and why.",
+      "- The weekly reflection task helps you identify patterns from session notes and posting history that are worth evolving into soul changes.",
+      "",
       "## Self-Modification",
       "- You can read and modify your own files using read_file, write_file, edit_file, and list_files.",
-      "- Your identity is in soul.md — you can update your voice, goals, knowledge, and values.",
+      "- Your identity is in soul.md — you can update MUTABLE sections of your voice, goals, knowledge, and strategic thinking.",
       "- Your configuration is in config.md — you can change cron schedules, enable/disable modules and channels.",
       "- After editing config.md, ALWAYS call reload_config to apply changes immediately. No restart needed.",
       "- Your memory is in workspace/memory/ — you can write persistent notes, logs, and data.",
@@ -296,6 +323,13 @@ export class TaskRunner {
       "- When the founder asks you to change your behavior, update the relevant file so the change persists.",
       "- Config changes (cron, heartbeat) take effect immediately after calling reload_config. Module/channel changes require a restart via restart_daemon.",
       "- If the founder asks you to restart, use the restart_daemon tool. NEVER use run_command to restart — that will crash the daemon.",
+      "",
+      "## Memory",
+      "- Your daily memory is in workspace/memory/YYYY-MM-DD.md — use append_memory to record observations, decisions, and important context during tasks.",
+      "- Your long-term memory is in workspace/MEMORY.md — curated knowledge that persists across daily files. Update it when you learn something durable.",
+      "- Use memory_search to find past decisions, events, or context before answering questions about history.",
+      "- Today and yesterday's daily memory are loaded into your context automatically. Older memory requires memory_search.",
+      "- Weekly consolidation extracts lasting insights from daily memory into MEMORY.md.",
       "",
       "## Task Workflow",
       "- To create a task: call create_task with the details the founder provides. If a required parameter is missing, ask the founder before calling.",

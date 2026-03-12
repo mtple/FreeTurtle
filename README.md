@@ -17,13 +17,12 @@ FreeTurtle gives you an AI agent that operates as your project's CEO — it post
 
 FreeTurtle is a long-running daemon — it needs a machine that stays on 24/7.
 
-#### Local (recommended for getting started)
+#### Local
 
-Run FreeTurtle on hardware you already own. No cloud account needed, no ongoing costs, and your data stays on your machine.
+Give your turtle its own dedicated machine using hardware you already own.
 
-- **Your existing Mac or Linux machine** — just leave it running. Works great for testing or if your machine is always on.
 - **Raspberry Pi** — a $35-80 single-board computer that runs headless, draws ~5W of power, and is perfect for always-on daemons. A Pi 4 (4GB+) or Pi 5 handles FreeTurtle easily. Install the 64-bit Raspberry Pi OS Lite, plug in ethernet, and SSH in.
-- **Any old laptop or desktop** — install Ubuntu Server and repurpose it as a dedicated FreeTurtle box.
+- **Any old laptop or desktop** — repurpose it as a dedicated FreeTurtle box.
 
 #### Cloud
 
@@ -440,7 +439,7 @@ Your cloud provider (Oracle, Railway, Fly.io, DigitalOcean, etc.) has full acces
 
 ## Roadmap
 
-- **v0.2** — XMTP integration (public-facing DMs)
+- **v0.2** — XMTP integration (public-facing DMs), onchain actions
 - **Future** — Hosted dashboard, multi-CEO management
 
 ## License

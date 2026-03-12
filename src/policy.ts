@@ -145,6 +145,21 @@ export function assertOnchainScopeAllowed(
   }
 }
 
+/**
+ * Check if targetText falls inside a <!-- CORE --> ... <!-- /CORE --> block.
+ * Used to enforce immutability of CORE soul sections.
+ */
+export function isCoreSection(fileContent: string, targetText: string): boolean {
+  const coreBlockRe = /<!--\s*CORE\s*-->([\s\S]*?)<!--\s*\/CORE\s*-->/g;
+  let match: RegExpExecArray | null;
+  while ((match = coreBlockRe.exec(fileContent)) !== null) {
+    if (match[1].includes(targetText)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Files that require founder approval to modify */
 const PROTECTED_WORKSPACE_FILES = ["soul.md", "config.md", ".env"];
 

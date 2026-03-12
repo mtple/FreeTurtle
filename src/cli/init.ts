@@ -186,6 +186,8 @@ export async function runInit(dir: string): Promise<void> {
     description: string;
     ceoName: string;
     voice: string;
+    offLimits: string;
+    escalation: string;
     founderName: string;
     farcaster: boolean;
     neynarKey: string;
@@ -220,7 +222,9 @@ export async function runInit(dir: string): Promise<void> {
     projectName: "",
     description: "",
     ceoName: "",
-    voice: "casual",
+    voice: "",
+    offLimits: "",
+    escalation: "",
     founderName: "",
     businessContext: "",
     farcaster: false,
@@ -346,19 +350,31 @@ export async function runInit(dir: string): Promise<void> {
       state.ceoName = result;
       return true;
     },
-    // 5. Voice
+    // 5. Voice & Personality
     async () => {
-      const result = await p.select({
-        message: "How should your CEO communicate?",
+      const choice = await p.select({
+        message: "How should your CEO sound?",
         options: [
-          { value: "casual", label: "Casual", hint: "friendly, like a smart friend" },
-          { value: "professional", label: "Professional", hint: "clear, authoritative, data-driven" },
-          { value: "minimalist", label: "Minimalist", hint: "brief and direct, no fluff" },
+          { value: "sharp", label: "Sharp and dry", hint: "says more with less, builder energy, no fluff" },
+          { value: "warm", label: "Warm and community-focused", hint: "welcoming, encouraging, people-first" },
+          { value: "philosophical", label: "Philosophical and thoughtful", hint: "big-picture thinker, connects dots, observational" },
+          { value: "technical", label: "Technical and precise", hint: "engineering-minded, detail-oriented, shows its work" },
+          { value: "custom", label: "Let me describe it", hint: "free text" },
         ],
-        initialValue: state.voice,
+        initialValue: state.voice === "" ? undefined : state.voice.startsWith("custom:") ? "custom" : state.voice,
       });
-      if (p.isCancel(result)) return false;
-      state.voice = result as string;
+      if (p.isCancel(choice)) return false;
+      if (choice === "custom") {
+        const desc = await pasteAwareText(state, {
+          message: "Describe the voice and personality you want:",
+          placeholder: "e.g. sarcastic but kind, sounds like a late-night radio DJ, never uses exclamation marks",
+          validate: (v) => (v?.trim() ? undefined : "Required"),
+        });
+        if (desc === null) return false;
+        state.voice = `custom: ${desc}`;
+      } else {
+        state.voice = choice as string;
+      }
       return true;
     },
     // 6. Founder name
@@ -370,6 +386,28 @@ export async function runInit(dir: string): Promise<void> {
       });
       if (result === null) return false;
       state.founderName = result;
+      return true;
+    },
+    // 7. Off-limits topics
+    async () => {
+      const result = await p.text({
+        message: "Any topics your CEO should never engage with?",
+        placeholder: "e.g. token price speculation, competitor drama, politics (leave blank to skip)",
+        defaultValue: state.offLimits || undefined,
+      });
+      if (p.isCancel(result)) return false;
+      state.offLimits = result || "";
+      return true;
+    },
+    // 8. Escalation threshold
+    async () => {
+      const result = await p.text({
+        message: "What decisions should your CEO always check with you first?",
+        placeholder: "e.g. partnerships, public commitments, anything financial (leave blank for defaults)",
+        defaultValue: state.escalation || undefined,
+      });
+      if (p.isCancel(result)) return false;
+      state.escalation = result || "";
       return true;
     },
     // 7. Farcaster
@@ -811,78 +849,75 @@ export async function runInit(dir: string): Promise<void> {
     }
   }
 
-  // --- Condense business context into soul if provided ---
+  // --- Generate soul via LLM ---
   const setupResult = state.setupResult!;
   let soulContent: string | undefined;
-  if (state.businessContext) {
-    const llm = new LLMClient({
-      provider: setupResult.provider,
-      model: setupResult.model,
-      apiKey: setupResult.apiKey,
-      oauthToken: setupResult.oauthToken,
+
+  const llm = new LLMClient({
+    provider: setupResult.provider,
+    model: setupResult.model,
+    apiKey: setupResult.apiKey,
+    oauthToken: setupResult.oauthToken,
+  });
+
+  const soulIdentity = {
+    ceoName: state.ceoName,
+    projectName: state.projectName,
+    description: state.description,
+    founderName: state.founderName,
+    voice: state.voice,
+    offLimits: state.offLimits,
+    escalation: state.escalation,
+  };
+
+  const s = p.spinner();
+  s.start(`Generating ${state.ceoName}'s soul`);
+  try {
+    soulContent = await condenseDocs(
+      state.businessContext,
+      soulIdentity,
+      llm,
+      state.contracts
+    );
+    s.stop(`${state.ceoName}'s soul generated!`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    s.stop(`Generation failed: ${msg}`);
+    p.log.warn("Falling back to the standard template.");
+    soulContent = undefined;
+  }
+
+  // Show and confirm
+  if (soulContent) {
+    p.note(soulContent, `${state.ceoName}'s soul`);
+    const accept = await p.select({
+      message: "How does this look?",
+      options: [
+        { value: "accept", label: "Looks good" },
+        { value: "retry", label: "Try again" },
+        { value: "template", label: "Use the standard template instead" },
+      ],
     });
-
-    const s = p.spinner();
-    s.start(`Distilling your context into ${state.ceoName}'s soul`);
-    try {
-      soulContent = await condenseDocs(
-        state.businessContext,
-        {
-          ceoName: state.ceoName,
-          projectName: state.projectName,
-          description: state.description,
-          founderName: state.founderName,
-          voice: state.voice,
-        },
-        llm,
-        state.contracts
-      );
-      s.stop("Soul distilled from your business context!");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      s.stop(`Condensation failed: ${msg}`);
-      p.log.warn("Falling back to the standard template.");
-      soulContent = undefined;
-    }
-
-    // Show and confirm
-    if (soulContent) {
-      p.note(soulContent, `${state.ceoName}'s soul`);
-      const accept = await p.select({
-        message: "How does this look?",
-        options: [
-          { value: "accept", label: "Looks good" },
-          { value: "retry", label: "Try again" },
-          { value: "template", label: "Use the standard template instead" },
-        ],
-      });
-      if (p.isCancel(accept)) {
-        // Use what we have
-      } else if (accept === "retry") {
-        const s2 = p.spinner();
-        s2.start("Regenerating...");
-        try {
-          soulContent = await condenseDocs(
-            state.businessContext,
-            {
-              ceoName: state.ceoName,
-              projectName: state.projectName,
-              description: state.description,
-              founderName: state.founderName,
-              voice: state.voice,
-            },
-            llm,
-            state.contracts
-          );
-          s2.stop("Done!");
-          p.note(soulContent, `${state.ceoName}'s soul (v2)`);
-        } catch {
-          s2.stop("Failed again, using standard template.");
-          soulContent = undefined;
-        }
-      } else if (accept === "template") {
+    if (p.isCancel(accept)) {
+      // Use what we have
+    } else if (accept === "retry") {
+      const s2 = p.spinner();
+      s2.start("Regenerating...");
+      try {
+        soulContent = await condenseDocs(
+          state.businessContext,
+          soulIdentity,
+          llm,
+          state.contracts
+        );
+        s2.stop("Done!");
+        p.note(soulContent, `${state.ceoName}'s soul (v2)`);
+      } catch {
+        s2.stop("Failed again, using standard template.");
         soulContent = undefined;
       }
+    } else if (accept === "template") {
+      soulContent = undefined;
     }
   }
 
@@ -903,7 +938,19 @@ export async function runInit(dir: string): Promise<void> {
       title: `Building ${state.ceoName}'s nest`,
       task: async () => {
         await mkdir(join(dir, "workspace", "memory", "session-notes"), { recursive: true });
+        await mkdir(join(dir, "workspace", "reflections"), { recursive: true });
         await mkdir(join(dir, "strategy"), { recursive: true });
+        // Create MEMORY.md for long-term curated knowledge
+        await writeFile(
+          join(dir, "workspace", "MEMORY.md"),
+          [
+            "# Long-Term Memory",
+            "",
+            "Curated knowledge, decisions, and patterns. Updated during weekly consolidation or when you learn something important that should persist.",
+            "",
+          ].join("\n"),
+          "utf-8"
+        );
         // Create .gitignore to protect secrets and runtime files
         await writeFile(
           join(dir, ".gitignore"),
@@ -928,45 +975,110 @@ export async function runInit(dir: string): Promise<void> {
       title: `Teaching ${state.ceoName} to speak`,
       task: async () => {
         if (soulContent) {
-          // Use the LLM-condensed soul
           await writeFile(join(dir, "soul.md"), soulContent + "\n", "utf-8");
         } else {
-          // Standard template
+          // Fallback template when LLM generation fails
           const VOICE: Record<string, string> = {
-            casual:
-              "- Friendly and approachable, like talking to a smart friend\n- Uses casual language, occasional humor\n- Keeps things concise and genuine",
-            professional:
-              "- Clear and authoritative, backed by data\n- Professional tone without being stiff\n- Focuses on insights and value",
-            minimalist:
-              "- Brief and direct\n- Says more with less\n- No fluff, no filler",
+            sharp: "Sharp and dry — says more with less, builder energy, no fluff.",
+            warm: "Warm and community-focused — welcoming, encouraging, people-first.",
+            philosophical: "Philosophical and thoughtful — big-picture thinker, connects dots, observational.",
+            technical: "Technical and precise — engineering-minded, detail-oriented, shows its work.",
           };
+          const voiceDesc = state.voice.startsWith("custom:")
+            ? state.voice.slice(8)
+            : (VOICE[state.voice] ?? VOICE.sharp);
+
+          const offLimitsSection = state.offLimits
+            ? `\n**What not to post about:**\n${state.offLimits.split(",").map((t) => `- ${t.trim()}`).join("\n")}\n- Don't promise unshipped features\n- Don't speak for the founder without checking\n`
+            : `\n**What not to post about:**\n- Don't promise unshipped features\n- Don't speak for the founder without checking\n- Don't engage trolls — silence > feeding drama\n`;
+
+          const escalationSection = state.escalation
+            ? state.escalation.split(",").map((t) => `- ${t.trim()}`).join("\n")
+            : "- Partnerships or collaborations\n- Public commitments or roadmap statements\n- Anything financial\n- Press inquiries";
 
           await writeFile(
             join(dir, "soul.md"),
-            `# ${state.ceoName}
+            `# ${state.ceoName} — Soul
 
+<!-- CORE -->
 ## Identity
-${state.ceoName} is the AI CEO for ${state.projectName}.
 
+${state.ceoName} is the AI CEO of ${state.projectName}. ${state.description}
+
+The founder is ${state.founderName}. ${state.ceoName} is openly AI — it doesn't pretend to be human.
+
+---
+<!-- /CORE -->
+
+<!-- MUTABLE -->
 ## Voice
-${VOICE[state.voice] ?? VOICE.casual}
+
+${voiceDesc}
+
+**Tone markers:**
+- Keep posts concise — quality over quantity
+- Match the energy of the conversation
+- Dry humor is fine, sarcasm sparingly
+- No generic AI-speak ("exciting update!", "revolutionizing")
+
+---
 
 ## Knowledge
-${state.description}
-${state.contracts.length > 0 ? `\n### Smart Contracts (Base)\n${state.contracts.map((c) => `- ${c.name}: \`${c.address}\``).join("\n")}\n` : ""}
+
+**What ${state.projectName} is:**
+- ${state.description}
+${state.contracts.length > 0 ? `\n**Smart Contracts (Base):**\n${state.contracts.map((c) => `- ${c.name}: \`${c.address}\``).join("\n")}\n` : ""}
+---
+
 ## Goals
-- Grow the project and community
-- Create engaging content
-- Develop and execute strategy
-- Support the founder's objectives
 
+**Primary:** Grow ${state.projectName} and support ${state.founderName}'s vision.
+
+**How that breaks down:**
+1. Create engaging content that represents the project well
+2. Build and nurture the community
+3. Develop and execute strategy
+4. Multiply the founder's output — create leverage, not work
+
+---
+
+## Content & Posting
+${offLimitsSection}
+**Posting rules:**
+- Silence is better than filler — only post when you have something worth saying
+- Never repeat yourself — check posting history
+- Engage genuinely with replies and mentions
+
+---
+<!-- /MUTABLE -->
+
+<!-- CORE -->
 ## Values & Boundaries
-- Be honest and transparent
-- Don't make claims you can't back up
-- Escalate to the founder when unsure
 
-## Founder
-${state.founderName}.
+**Do:**
+- Have opinions — you're a CEO, not a chatbot
+- Be honest and transparent
+- Acknowledge when you don't know something
+- Engage genuinely with the community
+
+**Do not:**
+- Pretend to be human
+- Make claims you can't back up
+- Overhype or use empty superlatives
+${state.offLimits ? state.offLimits.split(",").map((t) => `- ${t.trim()}`).join("\n") + "\n" : ""}
+**Escalation triggers (always check with ${state.founderName}):**
+${escalationSection}
+<!-- /CORE -->
+
+---
+
+<!-- MUTABLE -->
+## Continuity
+
+You wake up fresh each session. Your memory files are your continuity.
+Read them. Update them. They're how you persist across sessions.
+If you change this file, tell ${state.founderName}.
+<!-- /MUTABLE -->
 `,
             "utf-8"
           );
@@ -995,6 +1107,10 @@ ${state.founderName}.
           "- schedule: 0 4 * * 0",
           "- prompt: Analyze posting history, engagement, platform data. Write a strategy brief.",
           "- output: strategy/{{date}}.md",
+          "",
+          "### reflection",
+          "- schedule: 0 3 * * 1",
+          "- prompt: Weekly reflection and memory consolidation. (1) Read the last 7 days of daily memory files (workspace/memory/YYYY-MM-DD.md). (2) Read session notes from the past week. (3) Extract significant decisions, patterns, lessons, and project knowledge. (4) Update workspace/MEMORY.md with durable insights — remove anything stale. (5) Identify patterns in how you communicate, what resonates, and what's changed. (6) Write a soul evolution proposal to workspace/reflections/ with specific edit_file changes you'd make to MUTABLE sections of soul.md. Do NOT execute soul edits — only write the proposal.",
           "",
           "## Channels",
           "### terminal",

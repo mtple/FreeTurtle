@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { requiresApproval, parsePolicy, getDefaultPolicy, PolicyDeniedError } from "./policy.js";
+import { requiresApproval, parsePolicy, getDefaultPolicy, PolicyDeniedError, isCoreSection } from "./policy.js";
 
 describe("requiresApproval", () => {
   it("does not require approval for run_command", () => {
@@ -56,6 +56,84 @@ describe("requiresApproval", () => {
     expect(
       requiresApproval(policy, "commit_file", { branch: "feature/test" }),
     ).toBe(false);
+  });
+});
+
+const SAMPLE_SOUL = `# TestCEO — Soul
+
+<!-- CORE -->
+## Identity
+
+TestCEO is the AI CEO of TestProject. It builds things.
+
+The founder is Alice. TestCEO is openly AI.
+
+---
+<!-- /CORE -->
+
+<!-- MUTABLE -->
+## Voice
+
+Sharp and dry — says more with less.
+
+**Tone markers:**
+- Keep posts concise
+- No generic AI-speak
+
+---
+<!-- /MUTABLE -->
+
+<!-- CORE -->
+## Values & Boundaries
+
+**Do:**
+- Have opinions
+- Be honest
+
+**Do not:**
+- Pretend to be human
+- Overhype
+<!-- /CORE -->
+
+---
+
+<!-- MUTABLE -->
+## Continuity
+
+You wake up fresh each session.
+<!-- /MUTABLE -->
+`;
+
+describe("isCoreSection", () => {
+  it("identifies text inside a CORE block", () => {
+    expect(isCoreSection(SAMPLE_SOUL, "TestCEO is the AI CEO of TestProject")).toBe(true);
+  });
+
+  it("identifies text inside a second CORE block", () => {
+    expect(isCoreSection(SAMPLE_SOUL, "Pretend to be human")).toBe(true);
+  });
+
+  it("returns false for MUTABLE content", () => {
+    expect(isCoreSection(SAMPLE_SOUL, "Sharp and dry")).toBe(false);
+  });
+
+  it("returns false for MUTABLE Continuity content", () => {
+    expect(isCoreSection(SAMPLE_SOUL, "You wake up fresh each session")).toBe(false);
+  });
+
+  it("returns false for text not in any block", () => {
+    expect(isCoreSection(SAMPLE_SOUL, "this text does not exist anywhere")).toBe(false);
+  });
+
+  it("returns false when there are no CORE blocks", () => {
+    const noCoreFile = "## Identity\n\nJust some text.\n";
+    expect(isCoreSection(noCoreFile, "Just some text")).toBe(false);
+  });
+
+  it("handles text at the boundary of a CORE block", () => {
+    // The CORE tag itself is not inside the captured group
+    expect(isCoreSection(SAMPLE_SOUL, "## Identity")).toBe(true);
+    expect(isCoreSection(SAMPLE_SOUL, "## Values & Boundaries")).toBe(true);
   });
 });
 
