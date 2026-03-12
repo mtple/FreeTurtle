@@ -17,6 +17,7 @@ export const SENSITIVE_PATTERNS = [
   /ghp_[a-zA-Z0-9]{36}/g, // GitHub tokens
   /neynar-[a-zA-Z0-9]+/g, // Neynar keys
   /0x[a-fA-F0-9]{64}/g, // Private keys (64 hex chars)
+  /postgres(?:ql)?:\/\/[^\s"']+/gi, // Database connection strings
 ];
 
 /**

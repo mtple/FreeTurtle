@@ -76,4 +76,14 @@ export const workspaceTools: ToolDefinition[] = [
       required: [],
     },
   },
+  {
+    name: "reload_config",
+    description:
+      "Hot-reload config.md without restarting the daemon. Call this after editing config.md so changes (cron schedules, heartbeat settings) take effect immediately. No restart needed.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
 ];

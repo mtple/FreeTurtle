@@ -391,7 +391,7 @@ All external API calls (Neynar, GitHub, Postgres, BaseScan, RPC) are wrapped wit
 
 FreeTurtle is designed to be safe to run locally:
 
-- **No shell execution** — the CEO cannot run arbitrary commands
+- **Shell execution with env security** — commands run directly, but dangerous environment variables (PATH, HOME, LD_*, DYLD_*, NODE_OPTIONS) are blocked
 - **Sandboxed workspace** — file access is restricted to `~/.freeturtle/`, path traversal is blocked
 - **Protected self-modification** — changes to soul.md, config.md, and .env require founder approval
 - **Closed tool set** — only the tools defined by enabled modules are available
@@ -438,34 +438,9 @@ Your `.env` file contains API keys and tokens. FreeTurtle automatically sets it 
 
 Your cloud provider (Oracle, Railway, Fly.io, DigitalOcean, etc.) has full access to the underlying infrastructure — they can technically read any file on your VM. This is true of all cloud computing and is covered by their terms of service. For most use cases this is fine. If this is unacceptable for your threat model, run FreeTurtle on hardware you physically control (e.g. a Raspberry Pi or a spare laptop).
 
-## The Two-Turtle Vision (v0.2)
-
-The current v0.1 is a single-process CEO. v0.2 will split it into two:
-
-- **Inner Turtle** — has all the tools, writes to an outbox, never posts directly
-- **Outer Turtle** — reads the outbox, reviews actions, executes approved ones
-
-This creates **security by architecture, not by instruction**. The inner turtle can reason freely without risk because it literally cannot post or commit — only propose. The outer turtle is a simple approval layer.
-
-This pattern, proven by tortOS, means you can give your CEO powerful tools without worrying about rogue actions.
-
-## tortOS — Proof of Concept
-
-FreeTurtle generalizes the patterns proven by [tortOS](https://tortoise.xyz), which runs the Tortoise music platform on Farcaster/Base:
-
-- Autonomous posting and community engagement
-- Weekly strategy briefs
-- Database queries for platform analytics
-- GitHub issue management
-- All controlled by a soul config and readable memory files
-
-tortOS has been running autonomously for months. FreeTurtle packages those patterns into a framework anyone can use.
-
 ## Roadmap
 
-- **v0.1** — Single-process CEO (this release)
-- **v0.2** — Two-turtle architecture (inner/outer split, outbox, approval queue)
-- **v0.3** — XMTP integration (public-facing DMs)
+- **v0.2** — XMTP integration (public-facing DMs)
 - **Future** — Hosted dashboard, multi-CEO management
 
 ## License

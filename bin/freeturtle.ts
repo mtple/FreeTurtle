@@ -22,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.34");
+  .version("0.1.35");
 
 program
   .command("hello")
@@ -30,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.34");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.35");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
@@ -128,6 +128,25 @@ program
   .action(async (opts) => {
     const { runRestart } = await import("../src/cli/restart.js");
     await runRestart(opts.dir);
+  });
+
+program
+  .command("reload")
+  .description("Hot-reload config.md (cron schedules, heartbeat) without restarting")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    try {
+      const { rpcCall } = await import("../src/rpc/client.js");
+      const result = await rpcCall("reload") as { reloaded: string[] };
+      if (result.reloaded.length > 0) {
+        console.log(`Config reloaded. Updated: ${result.reloaded.join(", ")}`);
+      } else {
+        console.log("Config reloaded. No changes detected.");
+      }
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
   });
 
 program

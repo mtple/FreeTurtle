@@ -58,6 +58,7 @@ export class FreeTurtleDaemon {
   private shuttingDown = false;
   private messageQueue: Promise<string> = Promise.resolve("");
   private watchdogTimer?: ReturnType<typeof setInterval>;
+  private currentConfig?: Awaited<ReturnType<typeof loadConfig>>;
 
   constructor(dir: string, options: DaemonOptions = {}) {
     this.dir = dir;
@@ -72,6 +73,7 @@ export class FreeTurtleDaemon {
 
     // Load config
     const config = await loadConfig(this.dir);
+    this.currentConfig = config;
     this.logger.info("Config loaded");
 
     // Create LLM client
@@ -383,6 +385,63 @@ export class FreeTurtleDaemon {
     this.logger.info("FreeTurtle stopped");
   }
 
+  /**
+   * Hot-reload config.md: re-reads config and restarts scheduler/heartbeat
+   * without restarting the entire daemon process.
+   */
+  async reloadConfig(): Promise<{ reloaded: string[] }> {
+    const reloaded: string[] = [];
+
+    const newConfig = await loadConfig(this.dir);
+    const oldConfig = this.currentConfig;
+    this.currentConfig = newConfig;
+
+    // Reload scheduler if cron changed
+    const oldCron = JSON.stringify(oldConfig?.cron ?? {});
+    const newCron = JSON.stringify(newConfig.cron);
+    if (oldCron !== newCron) {
+      this.scheduler?.stop();
+      if (Object.keys(newConfig.cron).length > 0 && this.runner) {
+        this.scheduler = new Scheduler(newConfig.cron, this.runner, this.logger);
+        this.scheduler.start();
+        reloaded.push("scheduler");
+      } else {
+        this.scheduler = undefined;
+      }
+    }
+
+    // Reload heartbeat if changed
+    const oldHb = JSON.stringify(oldConfig?.heartbeat ?? {});
+    const newHb = JSON.stringify(newConfig.heartbeat);
+    if (oldHb !== newHb) {
+      this.heartbeat?.stop();
+      if (newConfig.heartbeat.enabled && this.runner) {
+        this.heartbeat = new Heartbeat(this.runner, this.logger, {
+          intervalMs: newConfig.heartbeat.interval_minutes * 60 * 1000,
+          onAlert: (msg) => {
+            for (const ch of this.channels) {
+              ch.send(msg).catch((err) => {
+                this.logger.error(`Failed to send alert via ${ch.name}: ${err}`);
+              });
+            }
+          },
+        });
+        this.heartbeat.start();
+        reloaded.push("heartbeat");
+      } else {
+        this.heartbeat = undefined;
+      }
+    }
+
+    if (reloaded.length > 0) {
+      this.logger.info(`Config reloaded: ${reloaded.join(", ")}`);
+    } else {
+      this.logger.info("Config reloaded (no changes detected)");
+    }
+
+    return { reloaded };
+  }
+
   private async handleRpc(
     method: string,
     params: Record<string, unknown>,
@@ -438,6 +497,9 @@ export class FreeTurtleDaemon {
         if (!this.runner) throw new Error("Runner not initialized");
         return await this.runner.getApprovalManager().list("pending");
       }
+
+      case "reload":
+        return await this.reloadConfig();
 
       case "stop":
         this.stop().then(() => process.exit(0)).catch((e) => {

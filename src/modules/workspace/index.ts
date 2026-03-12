@@ -42,6 +42,8 @@ export class WorkspaceModule implements FreeTurtleModule {
         );
       case "list_files":
         return this.listFiles((input.path as string) || ".");
+      case "reload_config":
+        return this.reloadConfig();
       default:
         throw new Error(`Unknown workspace tool: ${name}`);
     }
@@ -99,6 +101,20 @@ export class WorkspaceModule implements FreeTurtleModule {
     const updated = content.replace(oldText, newText);
     await writeFile(full, updated, "utf-8");
     return `Edited: ${path}`;
+  }
+
+  private async reloadConfig(): Promise<string> {
+    try {
+      const { rpcCall } = await import("../../rpc/client.js");
+      const result = await rpcCall("reload") as { reloaded: string[] };
+      if (result.reloaded.length > 0) {
+        return `Config reloaded. Updated: ${result.reloaded.join(", ")}. Changes are now active.`;
+      }
+      return "Config reloaded. No changes detected (or changes don't require reload).";
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return `Config reload failed: ${msg}`;
+    }
   }
 
   private async listFiles(path: string): Promise<string> {

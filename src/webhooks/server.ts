@@ -1,6 +1,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import crypto from "node:crypto";
 import type { Logger } from "../logger.js";
+import { wrapWebhookContent, detectSuspiciousPatterns } from "../security/external-content.js";
 
 const NEYNAR_CAST_API = "https://api.neynar.com/v2/farcaster/cast";
 
@@ -206,14 +207,23 @@ export class WebhookServer {
       instruction = `Compose a reply and post it as a reply to cast hash ${castHash}.`;
     }
 
+    // Detect and log suspicious patterns in external content
+    const suspicious = detectSuspiciousPatterns(castText);
+    if (suspicious.length > 0) {
+      this.options.logger.warn(
+        `Webhook: suspicious patterns in cast from @${authorUsername}: ${suspicious.join(", ")}`,
+      );
+    }
+
+    // Wrap untrusted cast content with security boundary markers
     let prompt = `[${label} — use reply_to_cast tool with parent_hash "${castHash}" if replying]\n\n`;
 
     if (parentContext) {
       prompt += `Conversation context:\n`;
-      prompt += `@${parentContext.username} said: "${parentContext.text}"\n\n`;
-      prompt += `@${authorUsername} replied: "${castText}"\n\n`;
+      prompt += `@${parentContext.username} said: ${wrapWebhookContent(parentContext.text)}\n\n`;
+      prompt += `@${authorUsername} replied: ${wrapWebhookContent(castText)}\n\n`;
     } else {
-      prompt += `@${authorUsername} said: "${castText}"\n\n`;
+      prompt += `@${authorUsername} said: ${wrapWebhookContent(castText)}\n\n`;
     }
 
     prompt += instruction;

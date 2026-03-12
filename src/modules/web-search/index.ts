@@ -10,6 +10,7 @@
  */
 
 import type { FreeTurtleModule, ToolDefinition } from "../types.js";
+import { wrapWebContent } from "../../security/external-content.js";
 
 // --- Constants ---
 const BRAVE_WEB_URL = "https://api.search.brave.com/res/v1/web/search";
@@ -318,9 +319,9 @@ export class WebSearchModule implements FreeTurtleModule {
     const entries = data.web?.results ?? [];
 
     const results = entries.map((entry) => ({
-      title: entry.title ?? "",
+      title: wrapWebContent(entry.title ?? ""),
       url: entry.url ?? "",
-      description: entry.description ?? "",
+      description: wrapWebContent(entry.description ?? ""),
       published: entry.age ?? undefined,
       siteName: entry.url ? hostnameFromUrl(entry.url) : "",
     }));
@@ -330,6 +331,7 @@ export class WebSearchModule implements FreeTurtleModule {
       provider: "brave",
       count: results.length,
       tookMs,
+      externalContent: { untrusted: true, source: "web_search", provider: "brave" },
       results,
     });
   }
@@ -343,8 +345,8 @@ export class WebSearchModule implements FreeTurtleModule {
 
     const results = entries.map((entry) => ({
       url: entry.url ?? "",
-      title: entry.title ?? "",
-      snippets: entry.snippets ?? [],
+      title: wrapWebContent(entry.title ?? ""),
+      snippets: (entry.snippets ?? []).map((s) => wrapWebContent(s)),
       siteName: entry.url ? hostnameFromUrl(entry.url) : "",
     }));
 
