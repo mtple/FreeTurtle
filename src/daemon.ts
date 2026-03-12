@@ -551,12 +551,13 @@ export class FreeTurtleDaemon {
         this.logger.info("Self-restart requested via RPC");
         void (async () => {
           try {
-            const { startDaemon } = await import("./cli/daemon-utils.js");
-            // Small delay to let the RPC response reach the caller
+            const { startDaemonDelayed } = await import("./cli/daemon-utils.js");
+            // Let the RPC response reach the caller
             await new Promise((r) => setTimeout(r, 500));
+            // Schedule new daemon to start after a delay (gives old process time to fully exit)
+            startDaemonDelayed(this.dir, 2);
+            this.logger.info("New daemon scheduled, stopping old process");
             await this.stop();
-            startDaemon(this.dir);
-            this.logger.info("New daemon spawned, exiting old process");
             process.exit(0);
           } catch (err) {
             this.logger.error(`Self-restart failed: ${err}`);

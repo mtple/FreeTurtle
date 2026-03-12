@@ -904,6 +904,22 @@ export async function runInit(dir: string): Promise<void> {
       task: async () => {
         await mkdir(join(dir, "workspace", "memory", "session-notes"), { recursive: true });
         await mkdir(join(dir, "strategy"), { recursive: true });
+        // Create .gitignore to protect secrets and runtime files
+        await writeFile(
+          join(dir, ".gitignore"),
+          [
+            "# Secrets",
+            ".env",
+            "",
+            "# Runtime",
+            "daemon.pid",
+            "",
+            "# OS",
+            ".DS_Store",
+            "",
+          ].join("\n"),
+          "utf-8"
+        );
         await sleep(300);
         return "Directories created";
       },

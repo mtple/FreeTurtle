@@ -40,6 +40,16 @@ export class GitHubModule implements FreeTurtleModule {
     }
 
     switch (name) {
+      case "create_repo": {
+        const result = await withRetry(() =>
+          this.client.createRepo(
+            input.name as string,
+            input.description as string | undefined,
+            input.private as boolean | undefined,
+          )
+        );
+        return JSON.stringify(result);
+      }
       case "create_issue": {
         const issue = await withRetry(() =>
           this.client.createIssue(

@@ -15,6 +15,12 @@ export interface CommitResult {
   html_url: string;
 }
 
+export interface RepoResult {
+  full_name: string;
+  html_url: string;
+  private: boolean;
+}
+
 export class GitHubClient {
   private octokit: Octokit;
 
@@ -70,6 +76,24 @@ export class GitHubClient {
       created_at: d.created_at,
       user: d.user?.login ?? "unknown",
     }));
+  }
+
+  async createRepo(
+    name: string,
+    description?: string,
+    isPrivate?: boolean,
+  ): Promise<RepoResult> {
+    const { data } = await this.octokit.repos.createForAuthenticatedUser({
+      name,
+      description,
+      private: isPrivate ?? false,
+      auto_init: true,
+    });
+    return {
+      full_name: data.full_name,
+      html_url: data.html_url,
+      private: data.private,
+    };
   }
 
   async commitFile(

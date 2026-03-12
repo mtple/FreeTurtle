@@ -2,6 +2,28 @@ import type { ToolDefinition } from "../types.js";
 
 export const githubTools: ToolDefinition[] = [
   {
+    name: "create_repo",
+    description: "Create a new GitHub repository under the authenticated user's account.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Repository name (e.g. 'my-project')",
+        },
+        description: {
+          type: "string",
+          description: "Short description of the repository",
+        },
+        private: {
+          type: "boolean",
+          description: "Whether the repo should be private (default: false)",
+        },
+      },
+      required: ["name"],
+    },
+  },
+  {
     name: "create_issue",
     description: "Create a new issue on a GitHub repository.",
     input_schema: {

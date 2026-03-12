@@ -22,7 +22,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.36");
+  .version("0.1.37");
 
 program
   .command("hello")
@@ -30,7 +30,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.36");
+    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.37");
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });

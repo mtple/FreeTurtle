@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 
@@ -36,17 +36,34 @@ export function stopDaemon(pid: number): void {
   }
 }
 
-export function startDaemon(dir: string): void {
-  let bin: string;
+function findBin(): string {
   try {
-    bin = execSync("which freeturtle", { encoding: "utf-8" }).trim();
+    return execSync("which freeturtle", { encoding: "utf-8" }).trim();
   } catch {
-    bin = "freeturtle";
+    return "freeturtle";
   }
+}
 
+export function startDaemon(dir: string): void {
+  const bin = findBin();
   const escaped = dir.replace(/'/g, "'\\''");
   execSync(
     `nohup ${bin} start --dir '${escaped}' </dev/null >/dev/null 2>&1 &`,
     { shell: "/bin/sh" },
   );
+}
+
+/**
+ * Schedule a daemon start after a delay (seconds).
+ * Used by self-restart so the old process can fully exit and release ports
+ * before the new process tries to bind them.
+ */
+export function startDaemonDelayed(dir: string, delaySec: number): void {
+  const bin = findBin();
+  // Use a detached shell that sleeps then starts the daemon
+  const child = spawn("sh", ["-c", `sleep ${delaySec} && exec ${bin} start --dir '${dir}'`], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
 }
