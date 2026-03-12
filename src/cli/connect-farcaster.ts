@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { enableModule } from "./config-utils.js";
 import { ViemLocalEip712Signer } from "@farcaster/hub-nodejs";
 import { bytesToHex, hexToBytes } from "viem";
 import { mnemonicToAccount } from "viem/accounts";
@@ -291,6 +292,16 @@ export async function connectFarcaster(dir: string): Promise<{
   await writeFile(envPath, envContent, "utf-8");
   await chmod(envPath, 0o600);
   p.log.success("Credentials saved to .env");
+
+  await enableModule(dir, "farcaster");
+
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — Farcaster is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate Farcaster.");
+  }
 
   p.outro("Farcaster connected!");
 

@@ -1,20 +1,21 @@
 // Policy types
+// undefined = no restriction (allow all), [] = deny all, [...values] = only allow listed
 export interface PolicyConfig {
   github: {
-    allowed_repos: string[];
-    allowed_paths: string[];
+    allowed_repos?: string[];
+    allowed_paths?: string[];
     approval_required_branches: string[]; // default: ["main"]
   };
   farcaster: {
-    allowed_channels: string[];
+    allowed_channels?: string[];
   };
   database: {
-    allowed_schemas: string[];
-    allowed_tables: string[];
+    allowed_schemas?: string[];
+    allowed_tables?: string[];
   };
   onchain: {
-    allowed_contracts: string[];
-    allowed_read_functions: string[];
+    allowed_contracts?: string[];
+    allowed_read_functions?: string[];
   };
   approvals: {
     timeout_seconds: number; // default: 300
@@ -181,23 +182,15 @@ export function requiresApproval(
 }
 
 export function getDefaultPolicy(): PolicyConfig {
+  // Default: permissive. undefined = allow all (no restriction).
+  // Users opt into restrictions by adding a ## Policy section to config.md.
   return {
     github: {
-      allowed_repos: [],
-      allowed_paths: [],
       approval_required_branches: ["main"],
     },
-    farcaster: {
-      allowed_channels: [],
-    },
-    database: {
-      allowed_schemas: [],
-      allowed_tables: [],
-    },
-    onchain: {
-      allowed_contracts: [],
-      allowed_read_functions: [],
-    },
+    farcaster: {},
+    database: {},
+    onchain: {},
     approvals: {
       timeout_seconds: 300,
       fail_mode: "deny",

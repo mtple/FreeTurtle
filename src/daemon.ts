@@ -53,6 +53,7 @@ export class FreeTurtleDaemon {
   private heartbeat?: Heartbeat;
   private channels: Channel[] = [];
   private runner?: TaskRunner;
+  private llmClient?: LLMClient;
   private rpcServer?: RpcServer;
   private webhookServer?: WebhookServer;
   private shuttingDown = false;
@@ -116,6 +117,7 @@ export class FreeTurtleDaemon {
       [credField]: credential,
       baseUrl: config.llm.base_url,
     });
+    this.llmClient = llm;
     this.logger.info(`LLM: ${provider} / ${config.llm.model}`);
 
     // Load modules (pass policy for allowlist enforcement)
@@ -386,15 +388,57 @@ export class FreeTurtleDaemon {
   }
 
   /**
-   * Hot-reload config.md: re-reads config and restarts scheduler/heartbeat
+   * Hot-reload: re-reads .env, config.md, modules, and restarts scheduler/heartbeat
    * without restarting the entire daemon process.
    */
   async reloadConfig(): Promise<{ reloaded: string[] }> {
     const reloaded: string[] = [];
 
+    // Re-read .env into process.env so new tokens are picked up
+    loadDotenv({ path: join(this.dir, ".env"), override: true });
+    const env = process.env as Record<string, string>;
+
     const newConfig = await loadConfig(this.dir);
     const oldConfig = this.currentConfig;
     this.currentConfig = newConfig;
+
+    // Reload modules if module config or env changed
+    // (Always reload — cheap operation, ensures new env vars are picked up)
+    const oldModules = JSON.stringify(oldConfig?.modules ?? {});
+    const newModules = JSON.stringify(newConfig.modules);
+    const modulesChanged = oldModules !== newModules;
+
+    // Always reload modules to pick up new env vars (e.g. after `connect github`)
+    try {
+      const modules = await loadModules(newConfig, env, this.logger, newConfig.policy, this.dir);
+      const skills = await loadSkills(this.dir, newConfig.skills, this.logger);
+
+      const sendToChannels = (msg: string) => {
+        for (const ch of this.channels) {
+          ch.send(msg).catch((err) => {
+            this.logger.error(`Failed to send via ${ch.name}: ${err}`);
+          });
+        }
+      };
+
+      this.runner = new TaskRunner(this.dir, this.llmClient!, modules, this.logger, {
+        policy: newConfig.policy,
+        skills,
+        onApprovalNeeded: (msg) => {
+          this.logger.info(`Approval notification: ${msg.slice(0, 100)}`);
+          sendToChannels(msg);
+        },
+        onFollowup: (msg) => {
+          this.logger.info(`Followup: ${msg.slice(0, 100)}`);
+          sendToChannels(msg);
+        },
+      });
+      reloaded.push("modules");
+      this.logger.info(`Modules reloaded: ${modules.map((m) => m.name).join(", ")}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      this.logger.error(`Failed to reload modules: ${msg}`);
+    }
 
     // Reload scheduler if cron changed
     const oldCron = JSON.stringify(oldConfig?.cron ?? {});

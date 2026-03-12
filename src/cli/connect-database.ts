@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { testDatabase } from "./connection-tests.js";
 import { upsertEnv } from "./env-utils.js";
+import { enableModule } from "./config-utils.js";
 
 export async function connectDatabase(dir: string): Promise<null | { url: string }> {
   p.intro("Connect Database");
@@ -26,6 +27,17 @@ export async function connectDatabase(dir: string): Promise<null | { url: string
   await upsertEnv(dir, { DATABASE_URL: url });
 
   p.log.success("Credentials saved to .env");
+
+  await enableModule(dir, "database");
+
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — Database is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate Database.");
+  }
+
   p.outro("Database connected!");
 
   return { url };

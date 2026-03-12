@@ -34,6 +34,15 @@ export async function connectTelegram(dir: string): Promise<null | { token: stri
   });
 
   p.log.success("Credentials saved to .env");
+
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — Telegram is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate Telegram.");
+  }
+
   p.outro("Telegram connected!");
 
   return { token, ownerId };

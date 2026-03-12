@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { testOnchain } from "./connection-tests.js";
 import { upsertEnv } from "./env-utils.js";
+import { enableModule } from "./config-utils.js";
 
 export async function connectOnchain(dir: string): Promise<null | { rpcUrl: string }> {
   p.intro("Connect Onchain");
@@ -26,6 +27,17 @@ export async function connectOnchain(dir: string): Promise<null | { rpcUrl: stri
   await upsertEnv(dir, { RPC_URL: rpcUrl });
 
   p.log.success("Credentials saved to .env");
+
+  await enableModule(dir, "onchain");
+
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — Onchain is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate Onchain.");
+  }
+
   p.outro("Onchain connected!");
 
   return { rpcUrl };

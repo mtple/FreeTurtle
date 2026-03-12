@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { readFile, writeFile, chmod, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { enableModule } from "./config-utils.js";
 import {
   runGoogleOAuthFlow,
   createGoogleOAuth2Client,
@@ -153,6 +154,17 @@ export async function connectGmail(
   await chmod(envPath, 0o600);
 
   p.log.success("Gmail credentials saved to .env");
+
+  await enableModule(dir, "gmail");
+
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — Gmail is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate Gmail.");
+  }
+
   p.outro("Gmail connected!");
 
   return {

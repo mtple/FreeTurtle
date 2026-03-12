@@ -93,4 +93,68 @@ export const farcasterTools: ToolDefinition[] = [
       required: ["target_hash"],
     },
   },
+  {
+    name: "fetch_cast",
+    description:
+      "Fetch a single cast by hash or Farcaster URL. Returns author, text, reactions, replies, embeds, and timestamp.",
+    input_schema: {
+      type: "object",
+      properties: {
+        identifier: {
+          type: "string",
+          description: "Cast hash (0x...) or Farcaster URL",
+        },
+      },
+      required: ["identifier"],
+    },
+  },
+  {
+    name: "search_casts",
+    description:
+      "Search Farcaster casts by query text. Use this to find mentions, conversations, or specific topics.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query (e.g. username, topic, URL)",
+        },
+        limit: {
+          type: "number",
+          description: "Number of results (default 20, max 100)",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "check_cast_engagement",
+    description:
+      "Check engagement stats (likes, recasts, replies) for a specific cast. Useful for tracking how a post is performing.",
+    input_schema: {
+      type: "object",
+      properties: {
+        hash: {
+          type: "string",
+          description: "The cast hash to check engagement for",
+        },
+      },
+      required: ["hash"],
+    },
+  },
+  {
+    name: "check_user",
+    description:
+      "Look up a Farcaster user by FID. Returns username, display name, follower count, and spam score.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fid: {
+          type: "number",
+          description: "The Farcaster FID of the user to look up",
+        },
+      },
+      required: ["fid"],
+    },
+  },
 ];

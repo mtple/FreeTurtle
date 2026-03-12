@@ -104,6 +104,83 @@ export class FarcasterModule implements FreeTurtleModule {
         return JSON.stringify(result);
       }
 
+      case "fetch_cast": {
+        const cast = await withRetry(() =>
+          this.client.fetchCast(input.identifier as string)
+        );
+        // Return a clean summary + key fields
+        const c = cast as Record<string, any>;
+        const summary = {
+          hash: c.hash,
+          author: c.author?.username ?? "unknown",
+          author_fid: c.author?.fid,
+          text: c.text,
+          timestamp: c.timestamp,
+          channel: c.channel?.name ?? null,
+          likes: c.reactions?.likes_count ?? 0,
+          recasts: c.reactions?.recasts_count ?? 0,
+          replies: c.replies?.count ?? 0,
+          embeds: c.embeds ?? [],
+        };
+        return JSON.stringify(summary, null, 2);
+      }
+
+      case "search_casts": {
+        const casts = await withRetry(() =>
+          this.client.searchCasts(
+            input.query as string,
+            (input.limit as number) ?? 20,
+          )
+        );
+        const results = casts.map((c: any) => ({
+          hash: c.hash,
+          author: c.author?.username ?? "unknown",
+          author_fid: c.author?.fid,
+          text: c.text?.slice(0, 300),
+          timestamp: c.timestamp,
+          likes: c.reactions?.likes_count ?? 0,
+          recasts: c.reactions?.recasts_count ?? 0,
+          replies: c.replies?.count ?? 0,
+        }));
+        return JSON.stringify(results, null, 2);
+      }
+
+      case "check_cast_engagement": {
+        const cast = await withRetry(() =>
+          this.client.fetchCast(input.hash as string)
+        );
+        const c = cast as Record<string, any>;
+        const likes = c.reactions?.likes_count ?? 0;
+        const recasts = c.reactions?.recasts_count ?? 0;
+        const replies = c.replies?.count ?? 0;
+        const score = likes * 3 + recasts * 5 + replies * 2;
+        return JSON.stringify({
+          hash: c.hash,
+          text: c.text?.slice(0, 200),
+          likes,
+          recasts,
+          replies,
+          score,
+          timestamp: c.timestamp,
+        }, null, 2);
+      }
+
+      case "check_user": {
+        const user = await withRetry(() =>
+          this.client.lookupUser(input.fid as number)
+        );
+        const u = user as Record<string, any>;
+        return JSON.stringify({
+          fid: u.fid,
+          username: u.username,
+          display_name: u.display_name,
+          score: u.score,
+          is_spam: (u.score ?? 0) < 0.5,
+          follower_count: u.follower_count,
+          following_count: u.following_count,
+        }, null, 2);
+      }
+
       default:
         throw new Error(`Unknown farcaster tool: ${name}`);
     }

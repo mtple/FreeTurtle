@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import { testGitHub } from "./connection-tests.js";
 import { upsertEnv } from "./env-utils.js";
+import { enableModule } from "./config-utils.js";
 
 export async function connectGitHub(dir: string): Promise<null | { token: string }> {
   p.intro("Connect GitHub");
@@ -33,8 +34,19 @@ export async function connectGitHub(dir: string): Promise<null | { token: string
   }
 
   await upsertEnv(dir, { GITHUB_TOKEN: token });
+  await enableModule(dir, "github");
 
   p.log.success("Credentials saved to .env");
+
+  // Try to hot-reload the running daemon
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — GitHub is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate GitHub.");
+  }
+
   p.outro("GitHub connected!");
 
   return { token };

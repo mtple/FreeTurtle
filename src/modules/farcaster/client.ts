@@ -110,6 +110,61 @@ export class NeynarClient {
     return this.postCast(text, { parent: parentHash });
   }
 
+  async fetchCast(identifier: string): Promise<Record<string, unknown>> {
+    const type = identifier.startsWith("http") ? "url" : "hash";
+    const params = new URLSearchParams({
+      identifier,
+      type,
+    });
+
+    const res = await fetch(`${BASE_URL}/cast?${params}`, {
+      headers: { "x-api-key": this.apiKey },
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Neynar fetchCast failed (${res.status}): ${err}`);
+    }
+
+    const data = (await res.json()) as { cast: Record<string, unknown> };
+    return data.cast;
+  }
+
+  async searchCasts(query: string, limit = 20): Promise<Record<string, unknown>[]> {
+    const params = new URLSearchParams({
+      q: query,
+      limit: String(Math.min(limit, 100)),
+    });
+
+    const res = await fetch(`${BASE_URL}/cast/search?${params}`, {
+      headers: { "x-api-key": this.apiKey },
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Neynar searchCasts failed (${res.status}): ${err}`);
+    }
+
+    const data = (await res.json()) as { result: { casts: Record<string, unknown>[] } };
+    return data.result?.casts ?? [];
+  }
+
+  async lookupUser(fid: number): Promise<Record<string, unknown>> {
+    const res = await fetch(`${BASE_URL}/user/bulk?fids=${fid}`, {
+      headers: { "x-api-key": this.apiKey },
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Neynar lookupUser failed (${res.status}): ${err}`);
+    }
+
+    const data = (await res.json()) as { users: Record<string, unknown>[] };
+    const user = data.users?.[0];
+    if (!user) throw new Error(`User with FID ${fid} not found`);
+    return user;
+  }
+
   async deleteCast(targetHash: string): Promise<{ success: boolean }> {
     const res = await fetch(`${BASE_URL}/cast`, {
       method: "DELETE",

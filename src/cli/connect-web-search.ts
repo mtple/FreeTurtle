@@ -39,6 +39,15 @@ export async function connectWebSearch(dir: string): Promise<null | { apiKey: st
 
   p.log.success("Credentials saved to .env");
   p.log.info("Module enabled in config.md");
+
+  try {
+    const { rpcCall } = await import("../rpc/client.js");
+    await rpcCall("reload");
+    p.log.success("Daemon reloaded — Web Search is now active.");
+  } catch {
+    p.log.info("Run 'freeturtle reload' or restart the daemon to activate Web Search.");
+  }
+
   p.outro("Web search connected! Your CEO can now search the web.");
 
   return { apiKey };
