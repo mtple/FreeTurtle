@@ -4,7 +4,7 @@ An open-source framework for deploying autonomous AI CEOs that run onchain busin
 
 FreeTurtle gives you an AI agent that operates as your project's CEO. It posts to Farcaster, responds to mentions, writes strategy briefs, manages GitHub repos, queries databases, reads smart contracts, and chats with you via Telegram. Everything it knows and does is stored as readable files (Markdown and JSON) that both you and the agent can edit. You define its identity, voice, and goals in a single `soul.md` file, set up cron schedules and tool access in `config.md`, and let it run. It modifies itself when you ask, requires your approval for anything destructive, and logs every action to an audit trail.
 
-**Coming soon:** public-facing DMs with XMTP, wallet balance tracking, onchain actions (creating bounty tasks via a TaskBoard contract, funding them with ETH, reviewing submissions, and paying contributors).
+**Coming soon:** public-facing DMs with XMTP, wallet balance tracking, onchain actions (autonomous onchain transactions, creating bounty tasks via a TaskBoard contract, funding them with ETH, reviewing submissions, and paying contributors).
 
 > **Beta software.** FreeTurtle is under active development. Expect bugs, breaking changes, and rough edges. If you run into issues, please open a GitHub issue or reach out directly.
 
