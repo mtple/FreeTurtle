@@ -86,4 +86,14 @@ export const workspaceTools: ToolDefinition[] = [
       required: [],
     },
   },
+  {
+    name: "restart_daemon",
+    description:
+      "Gracefully restart the FreeTurtle daemon. Spawns a new process, then exits the current one. Use when a full restart is needed (e.g. module/channel changes, .env changes). For cron/heartbeat changes, prefer reload_config instead.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
 ];

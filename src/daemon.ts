@@ -501,6 +501,26 @@ export class FreeTurtleDaemon {
       case "reload":
         return await this.reloadConfig();
 
+      case "restart":
+        // Spawn a new daemon, then exit this one.
+        // The new process is fully detached so it survives our exit.
+        this.logger.info("Self-restart requested via RPC");
+        void (async () => {
+          try {
+            const { startDaemon } = await import("./cli/daemon-utils.js");
+            // Small delay to let the RPC response reach the caller
+            await new Promise((r) => setTimeout(r, 500));
+            await this.stop();
+            startDaemon(this.dir);
+            this.logger.info("New daemon spawned, exiting old process");
+            process.exit(0);
+          } catch (err) {
+            this.logger.error(`Self-restart failed: ${err}`);
+            process.exit(1);
+          }
+        })();
+        return { restarting: true };
+
       case "stop":
         this.stop().then(() => process.exit(0)).catch((e) => {
           this.logger.error(`Stop error: ${e}`);

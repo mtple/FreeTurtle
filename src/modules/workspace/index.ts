@@ -44,6 +44,8 @@ export class WorkspaceModule implements FreeTurtleModule {
         return this.listFiles((input.path as string) || ".");
       case "reload_config":
         return this.reloadConfig();
+      case "restart_daemon":
+        return this.restartDaemon();
       default:
         throw new Error(`Unknown workspace tool: ${name}`);
     }
@@ -101,6 +103,17 @@ export class WorkspaceModule implements FreeTurtleModule {
     const updated = content.replace(oldText, newText);
     await writeFile(full, updated, "utf-8");
     return `Edited: ${path}`;
+  }
+
+  private async restartDaemon(): Promise<string> {
+    try {
+      const { rpcCall } = await import("../../rpc/client.js");
+      await rpcCall("restart");
+      return "Restart initiated. The daemon will shut down and a new process will start. You may be briefly unavailable.";
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return `Restart failed: ${msg}`;
+    }
   }
 
   private async reloadConfig(): Promise<string> {
