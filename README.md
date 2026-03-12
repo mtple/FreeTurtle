@@ -93,7 +93,7 @@ FreeTurtle is a Node.js daemon that mostly sleeps and wakes up when:
 All four route to the same **task runner**, which:
 
 1. Loads `soul.md` (the CEO's identity and voice)
-2. Loads recent memory (posting log, post queue)
+2. Loads recent memory (posting log, post queue, long-term memory, daily memory)
 3. Collects tools from active modules
 4. Calls the LLM (Claude or OpenAI)
 5. Checks policy allowlists and approval requirements before executing tools
@@ -166,6 +166,8 @@ Read and write files in the CEO's own workspace. This is how the CEO modifies it
 | `write_file` | Write or overwrite a file (soul.md/config.md/.env require approval) |
 | `edit_file` | Find-and-replace within a file (soul.md/config.md/.env require approval) |
 | `list_files` | List files and directories |
+| `append_memory` | Append a note to today's daily memory log |
+| `memory_search` | Search across all memory files, session notes, reflections, and strategy docs |
 
 All paths are sandboxed to `~/.freeturtle/` — the CEO cannot escape its workspace.
 
@@ -243,10 +245,13 @@ FreeTurtle stores everything in `~/.freeturtle/`:
 ├── .env                 # API keys and secrets
 └── workspace/
     ├── HEARTBEAT.md     # Heartbeat checklist
+    ├── MEMORY.md        # Curated long-term memory
     ├── memory/
+    │   ├── YYYY-MM-DD.md        # Daily memory logs
     │   ├── posting-log.json
     │   ├── post-queue.json
     │   └── session-notes/
+    ├── reflections/     # Soul evolution proposals
     ├── audit/           # Daily audit logs
     ├── approvals/       # Pending/resolved approval requests
     └── strategy/
@@ -317,7 +322,7 @@ FreeTurtle CEOs can modify their own behavior at runtime. Everything that define
 Examples of what you can tell your CEO:
 
 - **"Be more direct and honest"** — CEO edits the Voice section of `soul.md` (requires your approval)
-- **"Remember that @rish posts interesting stuff"** — CEO writes a note to `workspace/memory/notes.md`
+- **"Remember that @rish posts interesting stuff"** — CEO appends to today's daily memory or updates `MEMORY.md`
 - **"Change posting to every 4 hours"** — CEO edits the cron schedule in `config.md` (requires approval, takes effect on restart)
 - **"Add a goal about growing the Discord"** — CEO edits the Goals section of `soul.md` (requires approval)
 - **"Write a brief on this week's engagement"** — CEO writes to `workspace/strategy/`
