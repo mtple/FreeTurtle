@@ -37,4 +37,38 @@ describe("loadConfig", () => {
     const config = await loadConfig(dir);
     expect(config.heartbeat.enabled).toBe(false);
   });
+
+  it("filters out disabled cron tasks", async () => {
+    const { writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await writeFile(
+      join(dir, "config.md"),
+      [
+        "# Config",
+        "## LLM",
+        "- provider: claude_api",
+        "- model: claude-sonnet-4-20250514",
+        "",
+        "## Cron",
+        "### post",
+        "- schedule: disabled",
+        "- prompt: Post something",
+        "### active",
+        "- schedule: 0 */6 * * *",
+        "- prompt: Do something",
+        "### off_task",
+        "- schedule: off",
+        "- prompt: Should be skipped",
+        "",
+        "## Heartbeat",
+        "- enabled: false",
+      ].join("\n"),
+      "utf-8",
+    );
+    const config = await loadConfig(dir);
+    expect(config.cron.post).toBeUndefined();
+    expect(config.cron.off_task).toBeUndefined();
+    expect(config.cron.active).toBeDefined();
+    expect(config.cron.active.schedule).toBe("0 */6 * * *");
+  });
 });

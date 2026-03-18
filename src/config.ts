@@ -139,6 +139,15 @@ function parseConfig(raw: string): FreeTurtleConfig {
     }
   }
 
+  // Filter out disabled cron tasks — "disabled" is not a valid cron expression
+  // and will crash Croner if passed through.
+  for (const [name, task] of Object.entries(config.cron)) {
+    const sched = task.schedule.trim().toLowerCase();
+    if (!sched || sched === "disabled" || sched === "none" || sched === "off") {
+      delete config.cron[name];
+    }
+  }
+
   config.policy = parsePolicy(policyRaw);
   return config;
 }

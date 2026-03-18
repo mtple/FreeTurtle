@@ -31,9 +31,20 @@ export class Scheduler {
 
   start(): void {
     for (const [name, task] of Object.entries(this.tasks)) {
+      // Validate the cron expression before passing to Croner
+      let job: Cron;
+      try {
+        job = new Cron(task.schedule);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        this.logger.error(`Invalid cron expression for "${name}": "${task.schedule}" — ${msg}. Skipping.`);
+        continue;
+      }
+      job.stop(); // Stop the test instance
+
       this.logger.info(`Scheduling "${name}": ${task.schedule}`);
 
-      const job = new Cron(task.schedule, async () => {
+      const scheduledJob = new Cron(task.schedule, async () => {
         if (this.running.has(name)) {
           this.logger.warn(`Skipping "${name}" — previous run still in progress`);
           return;
@@ -55,7 +66,7 @@ export class Scheduler {
         }
       });
 
-      this.jobs.push(job);
+      this.jobs.push(scheduledJob);
     }
 
     this.logger.info(`Scheduler started with ${this.jobs.length} tasks`);
