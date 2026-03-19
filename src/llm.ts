@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import type {
@@ -6,6 +7,19 @@ import type {
   ToolExecutor,
 } from "./modules/types.js";
 import { withRetry } from "./reliability.js";
+
+const FALLBACK_CLAUDE_VERSION = "2.1.79";
+
+function detectClaudeCodeVersion(): string {
+  try {
+    const output = execSync("claude --version 2>/dev/null", { timeout: 5000, encoding: "utf-8" });
+    const match = output.match(/(\d+\.\d+\.\d+)/);
+    if (match) return match[1];
+  } catch {
+    // Claude Code not installed or not in PATH
+  }
+  return FALLBACK_CLAUDE_VERSION;
+}
 
 export type LLMProvider =
   | "claude_api"
@@ -65,7 +79,8 @@ export class LLMClient {
       this.anthropicClaudeCodeOAuth = isOAuthToken;
 
       if (isOAuthToken) {
-        // Match OpenClaw/pi-ai OAuth transport for Claude subscription tokens.
+        const ccVersion = detectClaudeCodeVersion();
+        // Match Claude Code OAuth transport for subscription tokens.
         this.anthropic = new Anthropic({
           authToken: options.oauthToken,
           baseURL: options.baseUrl,
@@ -75,7 +90,7 @@ export class LLMClient {
             "anthropic-dangerous-direct-browser-access": "true",
             "anthropic-beta":
               "claude-code-20250219,oauth-2025-04-20",
-            "user-agent": "claude-cli/2.1.79",
+            "user-agent": `claude-cli/${ccVersion}`,
             "x-app": "cli",
           },
         });
