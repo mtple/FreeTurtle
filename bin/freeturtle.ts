@@ -12,6 +12,7 @@ process.emit = ((event: string, ...args: unknown[]): boolean => {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
+import { VERSION } from "../src/version.js";
 
 const DEFAULT_DIR = join(homedir(), ".freeturtle");
 
@@ -22,7 +23,7 @@ program
   .description(
     "An open-source framework for deploying autonomous AI CEOs that run onchain businesses."
   )
-  .version("0.1.37");
+  .version(VERSION);
 
 program
   .command("hello")
@@ -30,7 +31,7 @@ program
   .action(() => {
     console.log("  \x1b[38;2;94;255;164m _____     ____\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m/      \\  |  o |\x1b[0m");
-    console.log("  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v0.1.37");
+    console.log(`  \x1b[38;2;94;255;164m|        |/ ___\\|\x1b[0m  FreeTurtle v${VERSION}`);
     console.log("  \x1b[38;2;94;255;164m|_________/\x1b[0m");
     console.log("  \x1b[38;2;94;255;164m|_|_| |_|_|\x1b[0m");
   });
