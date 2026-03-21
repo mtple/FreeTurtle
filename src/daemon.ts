@@ -142,6 +142,7 @@ export class FreeTurtleDaemon {
     this.runner = new TaskRunner(this.dir, llm, modules, this.logger, {
       policy: config.policy,
       skills,
+      config: { llm: { provider: config.llm.provider, model: config.llm.model } },
       onApprovalNeeded: (msg) => {
         this.logger.info(`Approval notification: ${msg.slice(0, 100)}`);
         sendToChannels(msg);
@@ -403,11 +404,48 @@ export class FreeTurtleDaemon {
     const oldConfig = this.currentConfig;
     this.currentConfig = newConfig;
 
-    // Reload modules if module config or env changed
-    // (Always reload — cheap operation, ensures new env vars are picked up)
-    const oldModules = JSON.stringify(oldConfig?.modules ?? {});
-    const newModules = JSON.stringify(newConfig.modules);
-    const modulesChanged = oldModules !== newModules;
+    // Reload LLM client if provider, model, or base_url changed
+    const oldLlm = JSON.stringify(oldConfig?.llm ?? {});
+    const newLlm = JSON.stringify(newConfig.llm);
+    if (oldLlm !== newLlm) {
+      try {
+        const newProvider = (newConfig.llm.provider ?? "claude_api") as LLMProvider;
+        const isOAuth = newProvider.endsWith("subscription");
+        const credEnvName = isOAuth
+          ? newConfig.llm.oauth_token_env
+          : newConfig.llm.api_key_env;
+        const credField = isOAuth ? "oauthToken" : "apiKey";
+
+        const FALLBACK_ENV: Record<string, string> = {
+          claude_api: "ANTHROPIC_API_KEY",
+          claude_subscription: "ANTHROPIC_AUTH_TOKEN",
+          openai_api: "OPENAI_API_KEY",
+          openai_subscription: "OPENAI_OAUTH_TOKEN",
+          openrouter: "OPENROUTER_API_KEY",
+          bankr: "BANKR_API_KEY",
+        };
+
+        const credential =
+          (credEnvName ? env[credEnvName] : undefined) ??
+          env[FALLBACK_ENV[newProvider]];
+
+        if (credential) {
+          this.llmClient = new LLMClient({
+            provider: newProvider,
+            model: newConfig.llm.model,
+            [credField]: credential,
+            baseUrl: newConfig.llm.base_url,
+          });
+          reloaded.push("llm");
+          this.logger.info(`LLM reloaded: ${newProvider} / ${newConfig.llm.model}`);
+        } else {
+          this.logger.error(`LLM reload skipped: missing credential for ${newProvider}`);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        this.logger.error(`Failed to reload LLM client: ${msg}`);
+      }
+    }
 
     // Always reload modules to pick up new env vars (e.g. after `connect github`)
     try {
@@ -425,6 +463,7 @@ export class FreeTurtleDaemon {
       this.runner = new TaskRunner(this.dir, this.llmClient!, modules, this.logger, {
         policy: newConfig.policy,
         skills,
+        config: { llm: { provider: newConfig.llm.provider, model: newConfig.llm.model } },
         onApprovalNeeded: (msg) => {
           this.logger.info(`Approval notification: ${msg.slice(0, 100)}`);
           sendToChannels(msg);
@@ -496,6 +535,10 @@ export class FreeTurtleDaemon {
         return {
           pid: process.pid,
           uptime: process.uptime(),
+          llm: {
+            provider: this.currentConfig?.llm.provider ?? "unknown",
+            model: this.currentConfig?.llm.model ?? "unknown",
+          },
           scheduler: this.scheduler?.getStatus() ?? null,
           channels: this.channels.map((c) => c.name),
         };

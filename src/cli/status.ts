@@ -4,6 +4,7 @@ export async function runStatus(dir: string): Promise<void> {
   const status = (await rpcCall("status")) as {
     pid: number;
     uptime: number;
+    llm?: { provider: string; model: string };
     scheduler?: { tasks?: { name: string; nextRun?: string; running?: boolean }[] };
     channels: string[];
   };
@@ -12,6 +13,9 @@ export async function runStatus(dir: string): Promise<void> {
 
   console.log(`\n  \x1b[38;2;94;255;164m🐢 FreeTurtle\x1b[0m — swimming for ${uptimeStr}\n`);
   console.log(`  PID        ${status.pid}`);
+  if (status.llm) {
+    console.log(`  LLM        ${status.llm.provider} / ${status.llm.model}`);
+  }
   console.log(`  Channels   ${status.channels.join(", ") || "none"}`);
 
   if (status.scheduler?.tasks?.length) {

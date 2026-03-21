@@ -45,6 +45,7 @@ export class TaskRunner {
   private auditLogger: AuditLogger;
   private onApprovalNeeded?: ApprovalNotifier;
   private onFollowup?: FollowupSender;
+  private config?: { llm: { provider: string; model: string } };
   private conversationHistory = new Map<string, ConversationTurn[]>();
   private static readonly MAX_HISTORY_TURNS = 10;
 
@@ -58,6 +59,7 @@ export class TaskRunner {
       onApprovalNeeded?: ApprovalNotifier;
       onFollowup?: FollowupSender;
       skills?: LoadedSkill[];
+      config?: { llm: { provider: string; model: string } };
     },
   ) {
     this.dir = dir;
@@ -66,6 +68,7 @@ export class TaskRunner {
     this.skills = options?.skills ?? [];
     this.logger = logger;
     this.policy = options?.policy;
+    this.config = options?.config;
     this.approvalManager = new ApprovalManager(dir);
     this.auditLogger = new AuditLogger(dir);
     this.onApprovalNeeded = options?.onApprovalNeeded;
@@ -304,6 +307,10 @@ export class TaskRunner {
       "- Log important actions and observations.",
       "- If you are unsure about something, say so rather than guessing.",
       `- The current date and time is: ${new Date().toISOString()}`,
+      `- Your current LLM provider is: ${this.config?.llm.provider ?? "unknown"} (model: ${this.config?.llm.model ?? "unknown"})`,
+      "- The founder can ask you to switch models or providers. To switch: edit the provider and/or model lines in config.md, then call reload_config. No restart needed.",
+      "- Available providers: claude_api, bankr, openai_api, openrouter, claude_subscription, openai_subscription.",
+      "- Bankr LLM Gateway models: claude-opus-4.6, claude-sonnet-4.6, claude-haiku-4.5, gemini-3-pro, gemini-3-flash, gpt-5.2, gpt-5-mini, kimi-k2.5, qwen3-coder.",
       "",
       "## Soul Evolution",
       "- Your soul.md has CORE sections (<!-- CORE -->) and MUTABLE sections (<!-- MUTABLE -->).",
