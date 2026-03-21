@@ -21,32 +21,17 @@ export const bankrTools: ToolDefinition[] = [
   {
     name: "bankr_prompt",
     description:
-      'Execute an onchain command using natural language. Examples: "what is the price of ETH?", "swap 0.1 ETH for USDC on Base", "what are my token balances?", "deploy a token called MyAgent with symbol AGENT on base". The command is processed asynchronously and this tool waits for the result.',
+      'YOUR PRIMARY TOOL for all onchain transactions. Use this to swap tokens, transfer funds, check prices, deploy tokens, and any other onchain operation. This tool handles everything — routing, approvals, gas, and execution across Base, Ethereum, Polygon, Unichain, and Solana. Just describe what you want in plain English. Examples: "swap $1 of ETH for USDC on base", "transfer 0.5 ETH to 0x123... on base", "what is the price of BTC?", "deploy a token called MyAgent with symbol AGENT on base". Always specify the chain name and token symbols.',
     input_schema: {
       type: "object",
       properties: {
         command: {
           type: "string",
           description:
-            "Natural language onchain command. Be specific with amounts, chain names, and token symbols.",
+            "Natural language onchain command. Always include the chain (e.g. 'on base'), token symbols, and amounts.",
         },
       },
       required: ["command"],
-    },
-  },
-  {
-    name: "bankr_job_status",
-    description:
-      "Check the status of a previously submitted bankr job. Use this if a prior bankr_prompt timed out and you want to check if it completed.",
-    input_schema: {
-      type: "object",
-      properties: {
-        jobId: {
-          type: "string",
-          description: "The job ID returned by a previous bankr_prompt call.",
-        },
-      },
-      required: ["jobId"],
     },
   },
 ];
@@ -55,9 +40,9 @@ async function pollJob(
   client: BankrWalletClient,
   jobId: string,
 ): Promise<string> {
-  let delay = 1000;
-  const maxDelay = 16000;
-  const deadline = Date.now() + 60000;
+  let delay = 2000;
+  const maxDelay = 5000;
+  const deadline = Date.now() + 300000;
 
   while (Date.now() < deadline) {
     const job = await client.getJobStatus(jobId);
@@ -76,7 +61,7 @@ async function pollJob(
     delay = Math.min(delay * 2, maxDelay);
   }
 
-  return `Job ${jobId} is still processing. Use bankr_job_status to check later.`;
+  return `Job ${jobId} timed out after 5 minutes. It may still complete — the transaction could be pending on-chain.`;
 }
 
 export async function executeBankrTool(
@@ -118,19 +103,17 @@ export async function executeBankrTool(
 
     case "bankr_prompt": {
       const command = input.command as string;
+      console.error(`[DEBUG] bankr_prompt command: ${command}`);
       const res = await client.prompt(command);
+      console.error(`[DEBUG] bankr_prompt response: ${JSON.stringify(res)}`);
 
       if (!res.success) {
         return `Bankr prompt failed: ${res.message ?? "unknown error"}`;
       }
 
-      return pollJob(client, res.jobId);
-    }
-
-    case "bankr_job_status": {
-      const jobId = input.jobId as string;
-      const job = await client.getJobStatus(jobId);
-      return JSON.stringify(job, null, 2);
+      const result = await pollJob(client, res.jobId);
+      console.error(`[DEBUG] bankr_prompt result: ${result.slice(0, 500)}`);
+      return result;
     }
 
     default:

@@ -53,9 +53,15 @@ export class OnchainModule implements FreeTurtleModule {
 
     // Bankr wallet is always available; CDP/private-key wallets are alpha
     if (env.BANKR_API_KEY) {
-      const { createBankrProvider } = await import("./wallet/bankr.js");
-      this.walletProvider = await createBankrProvider(env.BANKR_API_KEY);
-      this.hasBankrWallet = true;
+      try {
+        const { createBankrProvider } = await import("./wallet/bankr.js");
+        this.walletProvider = await createBankrProvider(env.BANKR_API_KEY);
+        this.hasBankrWallet = true;
+        console.error(`[INFO] Bankr wallet initialized: ${this.walletProvider.address}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[ERROR] Bankr wallet init failed: ${msg}`);
+      }
     }
 
     // Server wallet (CDP/private-key), taskboard, and portfolio are alpha features
@@ -74,7 +80,7 @@ export class OnchainModule implements FreeTurtleModule {
   getTools(): ToolDefinition[] {
     const tools: ToolDefinition[] = [...onchainTools];
 
-    if (isAlpha()) {
+    if (this.walletProvider) {
       tools.push({
         name: "wallet_status",
         description:
@@ -85,6 +91,9 @@ export class OnchainModule implements FreeTurtleModule {
           required: [],
         },
       });
+    }
+
+    if (isAlpha()) {
       if (this.hasTaskboard) {
         tools.push(...taskboardTools);
       }
@@ -141,7 +150,6 @@ export class OnchainModule implements FreeTurtleModule {
         return JSON.stringify(txs);
       }
       case "wallet_status": {
-        if (!isAlpha()) return ALPHA_REQUIRED_MSG;
         if (!this.walletProvider) {
           return "No wallet configured. Set CDP_API_KEY_ID + CDP_API_KEY_SECRET for CDP wallet, CEO_PRIVATE_KEY for private key wallet, or BANKR_API_KEY for bankr wallet.";
         }
@@ -154,6 +162,9 @@ export class OnchainModule implements FreeTurtleModule {
           if (cached?.solAddress) {
             status.solanaAddress = cached.solAddress;
           }
+          status.chains = "Base, Ethereum, Polygon, Unichain, Solana";
+          status.capabilities = "Use bankr_prompt to swap, transfer, check prices, deploy tokens. Use bankr_balances to check balances.";
+          return JSON.stringify(status);
         }
         if (this.env.TASK_CHAIN_ID) {
           try {

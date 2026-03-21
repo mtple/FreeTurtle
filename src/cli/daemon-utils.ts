@@ -1,6 +1,7 @@
 import { execSync, spawn } from "node:child_process";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
 
 export function getDaemonPid(dir: string): number | null {
   try {
@@ -16,7 +17,13 @@ export function getDaemonPid(dir: string): number | null {
 
 export function stopDaemon(pid: number): void {
   console.log(`Stopping daemon (PID ${pid})...`);
-  process.kill(pid, "SIGTERM");
+
+  // If systemd is managing the daemon, stop it via systemd to prevent auto-restart
+  if (isSystemdManaged()) {
+    execSync("systemctl --user stop freeturtle", { stdio: "inherit" });
+  } else {
+    process.kill(pid, "SIGTERM");
+  }
 
   // Wait for process to exit (up to 10 seconds)
   const deadline = Date.now() + 10_000;
@@ -44,13 +51,39 @@ function findBin(): string {
   }
 }
 
+export function isSystemdManaged(): boolean {
+  const servicePath = join(
+    homedir(),
+    ".config/systemd/user/freeturtle.service",
+  );
+  if (!existsSync(servicePath)) return false;
+  try {
+    const status = execSync("systemctl --user is-enabled freeturtle 2>/dev/null", {
+      encoding: "utf-8",
+    }).trim();
+    return status === "enabled";
+  } catch {
+    return false;
+  }
+}
+
 export function startDaemon(dir: string): void {
+  if (isSystemdManaged()) {
+    execSync("systemctl --user restart freeturtle", { stdio: "inherit" });
+    return;
+  }
   const bin = findBin();
   const escaped = dir.replace(/'/g, "'\\''");
   execSync(
     `nohup ${bin} start --dir '${escaped}' </dev/null >/dev/null 2>&1 &`,
     { shell: "/bin/sh" },
   );
+}
+
+export function stopDaemonService(): void {
+  if (isSystemdManaged()) {
+    execSync("systemctl --user stop freeturtle", { stdio: "inherit" });
+  }
 }
 
 /**
