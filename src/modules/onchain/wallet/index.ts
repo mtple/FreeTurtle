@@ -17,6 +17,12 @@ export async function createWalletProvider(
     return createPrivateKeyProvider(env.CEO_PRIVATE_KEY);
   }
 
+  // Priority 3: Bankr custodial wallet
+  if (env.BANKR_API_KEY) {
+    const { createBankrProvider } = await import("./bankr.js");
+    return createBankrProvider(env.BANKR_API_KEY);
+  }
+
   // No wallet configured — read-only mode
   return null;
 }

@@ -13,7 +13,12 @@ import {
   portfolioTools,
   executePortfolioTool,
 } from "./portfolio.js";
+import {
+  bankrTools,
+  executeBankrTool,
+} from "./bankr-tools.js";
 import { createWalletProvider, type WalletProvider } from "./wallet/index.js";
+import { getBankrClient, getCachedBalances } from "./wallet/bankr.js";
 import { setCachedAccount, getTaskChain } from "./chains.js";
 import { createPublicClient, formatEther, http } from "viem";
 
@@ -21,11 +26,12 @@ export class OnchainModule implements FreeTurtleModule {
   name = "onchain";
   description = "Read smart contracts, balances, and transactions on Base.";
 
-  private client!: OnchainClient;
+  private client: OnchainClient | null = null;
   private policy?: PolicyConfig;
   private env!: Record<string, string>;
   private hasWriteAccess = false;
   private hasTaskboard = false;
+  private hasBankrWallet = false;
   private workspaceDir?: string;
   private walletProvider: WalletProvider | null = null;
 
@@ -35,8 +41,12 @@ export class OnchainModule implements FreeTurtleModule {
     options?: { policy?: PolicyConfig },
   ): Promise<void> {
     const rpcUrl = env.RPC_URL;
-    if (!rpcUrl) throw new Error("Onchain module requires RPC_URL");
-    this.client = new OnchainClient(rpcUrl, env.BLOCK_EXPLORER_API_KEY);
+    if (!rpcUrl && !env.BANKR_API_KEY) {
+      throw new Error("Onchain module requires RPC_URL (or BANKR_API_KEY for bankr wallet)");
+    }
+    if (rpcUrl) {
+      this.client = new OnchainClient(rpcUrl, env.BLOCK_EXPLORER_API_KEY);
+    }
     this.policy = options?.policy;
     this.env = env;
     this.workspaceDir = _config._workspaceDir as string | undefined;
@@ -48,6 +58,7 @@ export class OnchainModule implements FreeTurtleModule {
         setCachedAccount(this.walletProvider.account);
       }
 
+      this.hasBankrWallet = this.walletProvider?.type === "bankr";
       this.hasWriteAccess = this.walletProvider !== null && !!env.TASK_CHAIN_ID;
       this.hasTaskboard =
         this.hasWriteAccess && !!env.TASK_CONTRACT_ADDRESS;
@@ -74,6 +85,9 @@ export class OnchainModule implements FreeTurtleModule {
       if (this.hasWriteAccess) {
         tools.push(...portfolioTools);
       }
+      if (this.hasBankrWallet) {
+        tools.push(...bankrTools);
+      }
     }
 
     return tools;
@@ -83,16 +97,17 @@ export class OnchainModule implements FreeTurtleModule {
     name: string,
     input: Record<string, unknown>,
   ): Promise<string> {
-    // Existing read-only tools
+    // Existing read-only tools (require OnchainClient / RPC_URL)
     switch (name) {
       case "read_contract": {
+        if (!this.client) return "RPC_URL not configured. Read-only onchain tools require RPC_URL.";
         assertOnchainScopeAllowed(
           this.policy,
           input.address as string,
           input.function_name as string,
         );
         const result = await withRetry(() =>
-          this.client.readContract(
+          this.client!.readContract(
             input.address as string,
             input.abi as unknown[],
             input.function_name as string,
@@ -102,14 +117,16 @@ export class OnchainModule implements FreeTurtleModule {
         return JSON.stringify(result);
       }
       case "get_balance": {
+        if (!this.client) return "RPC_URL not configured. Read-only onchain tools require RPC_URL.";
         const balance = await withRetry(() =>
-          this.client.getBalance(input.address as string),
+          this.client!.getBalance(input.address as string),
         );
         return `${balance} ETH`;
       }
       case "get_transactions": {
+        if (!this.client) return "RPC_URL not configured. Read-only onchain tools require RPC_URL.";
         const txs = await withRetry(() =>
-          this.client.getTransactions(
+          this.client!.getTransactions(
             input.address as string,
             (input.limit as number) ?? 10,
           ),
@@ -119,12 +136,18 @@ export class OnchainModule implements FreeTurtleModule {
       case "wallet_status": {
         if (!isAlpha()) return ALPHA_REQUIRED_MSG;
         if (!this.walletProvider) {
-          return "No wallet configured. Set CDP_API_KEY_ID + CDP_API_KEY_SECRET for CDP wallet, or CEO_PRIVATE_KEY for private key wallet.";
+          return "No wallet configured. Set CDP_API_KEY_ID + CDP_API_KEY_SECRET for CDP wallet, CEO_PRIVATE_KEY for private key wallet, or BANKR_API_KEY for bankr wallet.";
         }
         const status: Record<string, string> = {
           provider: this.walletProvider.type,
           address: this.walletProvider.address,
         };
+        if (this.walletProvider.type === "bankr") {
+          const cached = getCachedBalances();
+          if (cached?.solAddress) {
+            status.solanaAddress = cached.solAddress;
+          }
+        }
         if (this.env.TASK_CHAIN_ID) {
           try {
             const chain = getTaskChain(this.env);
@@ -154,6 +177,14 @@ export class OnchainModule implements FreeTurtleModule {
       if (!isAlpha()) return ALPHA_REQUIRED_MSG;
       if (!this.hasWriteAccess) return "Write access not configured. Set up a wallet and TASK_CHAIN_ID in .env";
       return executePortfolioTool(name, input, this.env);
+    }
+
+    // Bankr tools (alpha)
+    if (bankrTools.some((t) => t.name === name)) {
+      if (!isAlpha()) return ALPHA_REQUIRED_MSG;
+      const client = getBankrClient();
+      if (!client) return "Bankr wallet not configured. Set BANKR_API_KEY in .env";
+      return executeBankrTool(name, input, client);
     }
 
     throw new Error(`Unknown onchain tool: ${name}`);
