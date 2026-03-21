@@ -14,6 +14,7 @@ const ENV_MAP: Record<LLMProvider, { env: string; field: "apiKey" | "oauthToken"
   openai_api: { env: "OPENAI_API_KEY", field: "apiKey" },
   openai_subscription: { env: "OPENAI_OAUTH_TOKEN", field: "oauthToken" },
   openrouter: { env: "OPENROUTER_API_KEY", field: "apiKey" },
+  bankr: { env: "BANKR_API_KEY", field: "apiKey" },
 };
 
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
@@ -22,6 +23,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   openai_api: "gpt-4o-mini",
   openai_subscription: "gpt-4o-mini",
   openrouter: "anthropic/claude-sonnet-4-5",
+  bankr: "claude-sonnet-4.6",
 };
 
 const provider = (process.env.LLM_PROVIDER ?? "claude_api") as LLMProvider;

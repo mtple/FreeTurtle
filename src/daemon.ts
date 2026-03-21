@@ -92,6 +92,7 @@ export class FreeTurtleDaemon {
       openai_api: "OPENAI_API_KEY",
       openai_subscription: "OPENAI_OAUTH_TOKEN",
       openrouter: "OPENROUTER_API_KEY",
+      bankr: "BANKR_API_KEY",
     };
 
     // Refresh OpenAI OAuth access token when needed before creating the LLM client.

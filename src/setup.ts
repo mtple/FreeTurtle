@@ -81,6 +81,15 @@ const PROVIDERS: Record<LLMProvider, ProviderInfo> = {
     defaultModel: "gpt-4.1-mini",
     credPrompt: "OpenAI Codex access token",
   },
+  bankr: {
+    label: "Bankr LLM Gateway",
+    hint: "API key from bankr.bot/api — credits at bankr.bot/llm",
+    credEnv: "BANKR_API_KEY",
+    credField: "apiKey",
+    credEnvField: "api_key_env",
+    defaultModel: "claude-sonnet-4.6",
+    credPrompt: "Bankr API key (bk_...)",
+  },
 };
 
 const PROVIDER_ORDER: LLMProvider[] = [
@@ -89,6 +98,7 @@ const PROVIDER_ORDER: LLMProvider[] = [
   "claude_api",
   "openai_api",
   "openrouter",
+  "bankr",
 ];
 
 export async function runSetup(dir: string): Promise<SetupResult> {

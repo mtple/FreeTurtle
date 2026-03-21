@@ -26,7 +26,8 @@ export type LLMProvider =
   | "claude_subscription"
   | "openai_api"
   | "openai_subscription"
-  | "openrouter";
+  | "openrouter"
+  | "bankr";
 
 export interface ConversationTurn {
   userMessage: string;
@@ -46,6 +47,29 @@ export interface LLMResponse {
   tool_calls: ToolCall[];
 }
 
+const CLAUDE_CODE_TOOL_NAME_MAP: Record<string, string> = {
+  read_file: "Read",
+  write_file: "Write",
+  edit_file: "Edit",
+  list_files: "LS",
+  run_command: "Bash",
+  web_search: "WebSearch",
+};
+
+function buildClaudeCodeSystemBlocks(systemPrompt: string): Anthropic.TextBlockParam[] {
+  const blocks: Anthropic.TextBlockParam[] = [
+    { type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." },
+  ];
+
+  for (const line of systemPrompt.replace(/\r\n/g, "\n").split("\n")) {
+    const text = line.trim();
+    if (!text) continue;
+    blocks.push({ type: "text", text });
+  }
+
+  return blocks;
+}
+
 export class LLMClient {
   private provider: "anthropic" | "openai";
   private model: string;
@@ -57,7 +81,7 @@ export class LLMClient {
 
   constructor(options: LLMClientOptions) {
     this.mode = options.provider;
-    this.provider = this.mode.startsWith("claude") ? "anthropic" : "openai";
+    this.provider = (this.mode.startsWith("claude") || this.mode === "bankr") ? "anthropic" : "openai";
     this.model = options.model;
 
     if (this.mode === "claude_api") {
@@ -67,6 +91,17 @@ export class LLMClient {
       this.anthropic = new Anthropic({
         apiKey: options.apiKey,
         baseURL: options.baseUrl,
+      });
+      return;
+    }
+
+    if (this.mode === "bankr") {
+      if (!options.apiKey) {
+        throw new Error("LLMClient missing required credential: apiKey");
+      }
+      this.anthropic = new Anthropic({
+        apiKey: options.apiKey,
+        baseURL: options.baseUrl ?? "https://llm.bankr.bot",
       });
       return;
     }
@@ -89,7 +124,7 @@ export class LLMClient {
             accept: "application/json",
             "anthropic-dangerous-direct-browser-access": "true",
             "anthropic-beta":
-              "claude-code-20250219,oauth-2025-04-20",
+              "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14",
             "user-agent": `claude-cli/${ccVersion}`,
             "x-app": "cli",
           },
@@ -196,11 +231,9 @@ export class LLMClient {
     messages: Anthropic.MessageParam[],
     tools?: ToolDefinition[]
   ): Promise<LLMResponse> {
-    const effectiveSystemPrompt = this.anthropicClaudeCodeOAuth
-      ? [
-          "You are Claude Code, Anthropic's official CLI for Claude.",
-          systemPrompt,
-        ].join("\n\n")
+    // OAuth proxy requires Claude Code identity first, and rejects multiline system text blocks.
+    const systemParam: string | Anthropic.TextBlockParam[] = this.anthropicClaudeCodeOAuth
+      ? buildClaudeCodeSystemBlocks(systemPrompt)
       : systemPrompt;
 
     const response = await withRetry(
@@ -208,12 +241,12 @@ export class LLMClient {
         this.anthropic!.messages.create({
           model: this.model,
           max_tokens: 4096,
-          system: effectiveSystemPrompt,
+          system: systemParam,
           messages,
           ...(tools?.length
             ? {
                 tools: tools.map((t) => ({
-                  name: t.name,
+                  name: this.mapToolNameForAnthropic(t.name),
                   description: t.description,
                   input_schema: t.input_schema as Anthropic.Tool["input_schema"],
                 })),
@@ -232,7 +265,7 @@ export class LLMClient {
       } else if (block.type === "tool_use") {
         toolCalls.push({
           id: block.id,
-          name: block.name,
+          name: this.mapToolNameFromAnthropic(block.name),
           input: block.input as Record<string, unknown>,
         });
       }
@@ -298,7 +331,7 @@ export class LLMClient {
         assistantContent.push({
           type: "tool_use",
           id: tc.id,
-          name: tc.name,
+          name: this.mapToolNameForAnthropic(tc.name),
           input: tc.input,
         });
       }
@@ -508,6 +541,26 @@ export class LLMClient {
       text,
       newTurns: [{ userMessage: userPrompt, assistantResponse: text }],
     };
+  }
+
+  private mapToolNameForAnthropic(name: string): string {
+    if (!this.anthropicClaudeCodeOAuth) {
+      return name;
+    }
+    return CLAUDE_CODE_TOOL_NAME_MAP[name] ?? name;
+  }
+
+  private mapToolNameFromAnthropic(name: string): string {
+    if (!this.anthropicClaudeCodeOAuth) {
+      return name;
+    }
+
+    for (const [internalName, anthropicName] of Object.entries(CLAUDE_CODE_TOOL_NAME_MAP)) {
+      if (anthropicName === name) {
+        return internalName;
+      }
+    }
+    return name;
   }
 }
 
