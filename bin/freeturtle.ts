@@ -229,7 +229,7 @@ program
 
 const connect = program
   .command("connect")
-  .description("Connect external services (gmail, telegram, github, farcaster, database, onchain, web-search)");
+  .description("Connect external services (gmail, telegram, github, farcaster, database, onchain, web-search, x)");
 
 connect
   .command("gmail")
@@ -292,6 +292,15 @@ connect
   .action(async (opts) => {
     const { connectWebSearch } = await import("../src/cli/connect-web-search.js");
     await connectWebSearch(opts.dir);
+  });
+
+connect
+  .command("x")
+  .description("Connect X (formerly Twitter) for posting tweets")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { connectX } = await import("../src/cli/connect-x.js");
+    await connectX(opts.dir);
   });
 
 program
