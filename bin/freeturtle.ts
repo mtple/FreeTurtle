@@ -104,6 +104,37 @@ program
     }
   });
 
+const configCmd = program
+  .command("config")
+  .description("View or change configuration");
+
+configCmd
+  .command("show", { isDefault: true })
+  .description("Show current configuration")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { runConfigShow } = await import("../src/cli/config.js");
+    await runConfigShow(opts.dir);
+  });
+
+configCmd
+  .command("llm")
+  .description("Change LLM provider and model")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (opts) => {
+    const { runConfigLlm } = await import("../src/cli/config.js");
+    await runConfigLlm(opts.dir);
+  });
+
+configCmd
+  .command("model [name]")
+  .description("Quick-switch model (e.g. freeturtle config model gemini-3-flash)")
+  .option("--dir <path>", "Workspace directory", DEFAULT_DIR)
+  .action(async (name, opts) => {
+    const { runConfigModel } = await import("../src/cli/config.js");
+    await runConfigModel(opts.dir, name);
+  });
+
 program
   .command("send <message>")
   .description("Send a message to the running CEO")

@@ -496,7 +496,9 @@ function parseEnv(content: string): Record<string, string> {
   return parsed;
 }
 
-function updateConfigLlm(
+export { PROVIDERS, PROVIDER_ORDER };
+
+export function updateConfigLlm(
   content: string,
   values: Record<string, string>
 ): string {
@@ -539,7 +541,7 @@ function updateConfigLlm(
   return result.join("\n");
 }
 
-function mergeEnv(
+export function mergeEnv(
   existing: string,
   vars: Record<string, string>
 ): string {
