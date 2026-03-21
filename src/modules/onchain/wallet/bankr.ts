@@ -131,10 +131,15 @@ export async function createBankrProvider(
   const client = new BankrWalletClient(apiKey);
   _client = client;
 
-  // Fetch balances to get wallet addresses
-  const balances = await client.getBalances();
-  _cachedBalances = balances;
-  const address = balances.evmAddress as `0x${string}`;
+  // Fetch balances to get wallet addresses (non-fatal if it fails)
+  let address: `0x${string}` = "0x0000000000000000000000000000000000000000";
+  try {
+    const balances = await client.getBalances();
+    _cachedBalances = balances;
+    address = balances.evmAddress as `0x${string}`;
+  } catch {
+    // Wallet address will be unknown until first bankr_balances call
+  }
 
   const account = toAccount({
     address,

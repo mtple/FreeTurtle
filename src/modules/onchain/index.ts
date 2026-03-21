@@ -51,14 +51,20 @@ export class OnchainModule implements FreeTurtleModule {
     this.env = env;
     this.workspaceDir = _config._workspaceDir as string | undefined;
 
-    // Server wallet, taskboard, and portfolio are alpha features
-    if (isAlpha()) {
+    // Bankr wallet is always available; CDP/private-key wallets are alpha
+    if (env.BANKR_API_KEY) {
+      const { createBankrProvider } = await import("./wallet/bankr.js");
+      this.walletProvider = await createBankrProvider(env.BANKR_API_KEY);
+      this.hasBankrWallet = true;
+    }
+
+    // Server wallet (CDP/private-key), taskboard, and portfolio are alpha features
+    if (isAlpha() && !this.walletProvider) {
       this.walletProvider = await createWalletProvider(env);
       if (this.walletProvider) {
         setCachedAccount(this.walletProvider.account);
       }
 
-      this.hasBankrWallet = this.walletProvider?.type === "bankr";
       this.hasWriteAccess = this.walletProvider !== null && !!env.TASK_CHAIN_ID;
       this.hasTaskboard =
         this.hasWriteAccess && !!env.TASK_CONTRACT_ADDRESS;
@@ -85,9 +91,10 @@ export class OnchainModule implements FreeTurtleModule {
       if (this.hasWriteAccess) {
         tools.push(...portfolioTools);
       }
-      if (this.hasBankrWallet) {
-        tools.push(...bankrTools);
-      }
+    }
+
+    if (this.hasBankrWallet) {
+      tools.push(...bankrTools);
     }
 
     return tools;
@@ -179,9 +186,8 @@ export class OnchainModule implements FreeTurtleModule {
       return executePortfolioTool(name, input, this.env);
     }
 
-    // Bankr tools (alpha)
+    // Bankr tools
     if (bankrTools.some((t) => t.name === name)) {
-      if (!isAlpha()) return ALPHA_REQUIRED_MSG;
       const client = getBankrClient();
       if (!client) return "Bankr wallet not configured. Set BANKR_API_KEY in .env";
       return executeBankrTool(name, input, client);

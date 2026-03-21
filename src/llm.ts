@@ -350,9 +350,11 @@ export class LLMClient {
       messages.push({ role: "user", content: toolResults });
     }
 
-    // If we hit the limit, return whatever text we have
+    // If we hit the limit, make one final call with no tools to force a text reply
     const last = await this.chatAnthropic(systemPrompt, messages, []);
-    const text = last.text || "(Agent reached maximum tool call iterations)";
+    const text =
+      last.text ||
+      "I wasn't able to complete that request — I ran out of steps before finishing. Could you try again or rephrase?";
     return {
       text,
       newTurns: [{ userMessage: userPrompt, assistantResponse: text }],
@@ -534,9 +536,11 @@ export class LLMClient {
       }
     }
 
-    // If we hit the limit, return whatever text we have
+    // If we hit the limit, make one final call with no tools to force a text reply
     const last = await this.chatOpenAI(systemPrompt, messages, []);
-    const text = last.text || "(Agent reached maximum tool call iterations)";
+    const text =
+      last.text ||
+      "I wasn't able to complete that request — I ran out of steps before finishing. Could you try again or rephrase?";
     return {
       text,
       newTurns: [{ userMessage: userPrompt, assistantResponse: text }],
